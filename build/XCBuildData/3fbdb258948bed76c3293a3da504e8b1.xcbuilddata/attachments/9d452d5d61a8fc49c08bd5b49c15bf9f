@@ -1,0 +1,139 @@
+{
+  "" : {
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab-beta-primary.dia",
+    "emit-module-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab-beta-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab-beta-primary-emit-module.dia",
+    "pch" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab-beta-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab-beta-primary.swiftdeps"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/AudioEngineController.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioEngineController~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/AudioExtensions.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioExtensions~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/AudioRuntime.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioRuntime~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/FileStore.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/FileStore~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/SessionModels.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionModels~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/SessionPlayer.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionPlayer~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/SessionRecorder.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/SessionRecorder~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/TrackBus.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackBus~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Audio/TrackFX.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/TrackFX~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/ContentView.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/Views/AudioTestView.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/AudioTestView~partial.swiftmodule"
+  },
+  "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/tapelab-beta/tapelab_betaApp.swift" : {
+    "const-values" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.swiftconstvalues",
+    "dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.d",
+    "diagnostics" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.dia",
+    "index-unit-output-path" : "/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.o",
+    "llvm-bc" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.bc",
+    "object" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.o",
+    "swift-dependencies" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp.swiftdeps",
+    "swiftmodule" : "/Users/frvncois/Documents/DEV/tapelab/tapelab-beta/build/tapelab-beta.build/Debug-iphoneos/tapelab-beta.build/Objects-normal/arm64/tapelab_betaApp~partial.swiftmodule"
+  }
+}

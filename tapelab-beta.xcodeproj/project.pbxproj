@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5B473BCF2EBFBC7700CAFA9B /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = 5B473BCE2EBFBC7700CAFA9B /* Lottie */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		5B473B332EBC09D300CAFA9B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5B473BCF2EBFBC7700CAFA9B /* Lottie in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = "tapelab-beta";
 			packageProductDependencies = (
+				5B473BCE2EBFBC7700CAFA9B /* Lottie */,
 			);
 			productName = "tapelab-beta";
 			productReference = 5B473B252EBC09D100CAFA9B /* tapelab-beta.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 5B473B1C2EBC09D100CAFA9B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5B473BCD2EBFBC7700CAFA9B /* XCRemoteSwiftPackageReference "lottie-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5B473B262EBC09D100CAFA9B /* Products */;
 			projectDirPath = "";
@@ -400,6 +409,7 @@
 				DEVELOPMENT_TEAM = P3TGQ8WNAJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Tapelab needs access to your microphone to \n  record audio tracks.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,6 +442,7 @@
 				DEVELOPMENT_TEAM = P3TGQ8WNAJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Tapelab needs access to your microphone to \n  record audio tracks.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -578,6 +589,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5B473BCD2EBFBC7700CAFA9B /* XCRemoteSwiftPackageReference "lottie-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/airbnb/lottie-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 4.5.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5B473BCE2EBFBC7700CAFA9B /* Lottie */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5B473BCD2EBFBC7700CAFA9B /* XCRemoteSwiftPackageReference "lottie-spm" */;
+			productName = Lottie;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5B473B1D2EBC09D100CAFA9B /* Project object */;
 }
