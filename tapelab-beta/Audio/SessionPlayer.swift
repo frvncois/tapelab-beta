@@ -15,14 +15,14 @@ private let enableDebugLogs = false
 public final class SessionPlayer {
     // DEBUG FLAG - Set to true to enable detailed scheduling gap logging
     static let LOG_SCHEDULING_GAPS = true
-
+    
     public weak var engineController: AudioEngineController?
 
     private var regionBuffers: [[UUID: AVAudioPCMBuffer]] = []
 
-    // CRITICAL: Pre-rendered segments cache to eliminate real-time processing
-    // Key format: "trackIndex-regionID-startTime-duration"
-    private var preRenderedSegments: [String: AVAudioPCMBuffer] = [:]
+    // CRITICAL: Pre-rendered COMPLETE regions cache (entire region with all effects applied)
+    // Key format: "trackIndex-regionID"
+    private var preRenderedRegions: [String: AVAudioPCMBuffer] = [:]
 
     private var session: Session?
     private var timeline: TimelineState?
@@ -39,6 +39,9 @@ public final class SessionPlayer {
 
     // Track the furthest point we've scheduled for each track to prevent overlaps
     private var maxScheduledTime: [TimeInterval] = [0, 0, 0, 0]
+
+    // Track last scheduled player sample position per track for contiguous scheduling
+    private var lastScheduledPlayerSample: [AVAudioFramePosition] = [0, 0, 0, 0]
 
     // Track index currently being recorded (nil if no recording in progress)
     // Used to exclude recording track from playback to avoid file access conflicts
@@ -72,13 +75,13 @@ public final class SessionPlayer {
         preloadRegions(session)
         print("✅ Preload complete. Total regions loaded: \(regionBuffers.flatMap { $0.values }.count)")
 
-        // CRITICAL: Pre-render ALL segments with effects applied
+        // CRITICAL: Pre-render ENTIRE regions with all effects applied
         // This eliminates real-time processing during playback
-        print("⚙️ Pre-rendering segments (this may take a few seconds)...")
+        print("⚙️ Pre-rendering complete regions (this may take a few seconds)...")
         let renderStart = CACurrentMediaTime()
-        await preRenderAllSegments(session: session, sampleRate: ec.sampleRate)
+        await preRenderAllRegions(session: session, sampleRate: ec.sampleRate)
         let renderDuration = CACurrentMediaTime() - renderStart
-        print("✅ Pre-rendering complete in \(String(format: "%.2f", renderDuration))s. Cached \(preRenderedSegments.count) segments")
+        print("✅ Pre-rendering complete in \(String(format: "%.2f", renderDuration))s. Cached \(preRenderedRegions.count) regions")
 
         // Diagnostic: Check audio engine and output state BEFORE reset
         print("🔬 PRE-RESET: Engine running=\(ec.engine.isRunning)")
@@ -139,6 +142,7 @@ public final class SessionPlayer {
         // Reset scheduling tracking for new playback session
         maxScheduledTime = [0, 0, 0, 0]
         lastScheduledEndTime = [0, 0, 0, 0]
+        lastScheduledPlayerSample = [0, 0, 0, 0]
         print("🔄 Reset scheduling tracking for new playback session")
 
         isPlaying = true
@@ -213,6 +217,7 @@ public final class SessionPlayer {
         // Reset scheduling tracking
         maxScheduledTime = [0, 0, 0, 0]
         lastScheduledEndTime = [0, 0, 0, 0]
+        lastScheduledPlayerSample = [0, 0, 0, 0]
 
         timeline?.stopTimeline()
         print("🛑 Playback stopped")
@@ -286,9 +291,10 @@ public final class SessionPlayer {
 
     // MARK: - Pre-rendering
 
-    /// Pre-render all segments with effects applied to eliminate real-time processing
-    private func preRenderAllSegments(session: Session, sampleRate: Double) async {
-        preRenderedSegments.removeAll()
+    /// Pre-render ENTIRE regions with all effects applied
+    /// This is much simpler than chunking and eliminates all complexity
+    private func preRenderAllRegions(session: Session, sampleRate: Double) async {
+        preRenderedRegions.removeAll()
 
         for (tIndex, track) in session.tracks.enumerated() {
             // Skip recording track
@@ -297,49 +303,31 @@ public final class SessionPlayer {
             }
 
             for region in track.regions {
-                // Render the entire region
-                let regionStart = region.startTime
-                let regionEnd = region.startTime + region.duration
+                // Get source buffer (already loaded in preloadRegions)
+                guard let sourceBuffer = regionBuffers[tIndex][region.id.id] else {
+                    print("⚠️ Pre-render: No buffer for region \(region.id.id) on track \(tIndex + 1)")
+                    continue
+                }
 
-                // Create segments in reasonable chunks (10 seconds each)
-                let chunkDuration: TimeInterval = 10.0
-                var currentStart = regionStart
+                // Render the ENTIRE region with all effects applied at once
+                // No chunks, no complexity, just the whole thing
+                if let renderedRegion = makeSegment(
+                    from: sourceBuffer,
+                    sampleRate: sampleRate,
+                    offsetSeconds: region.fileStartOffset,
+                    durationSeconds: region.duration,
+                    reversed: region.reversed,
+                    fadeIn: region.fadeIn ?? 0,
+                    fadeOut: region.fadeOut ?? 0,
+                    gainDB: region.gainDB ?? 0
+                ) {
+                    // Cache the entire pre-rendered region with simple key
+                    let key = "\(tIndex)-\(region.id.id)"
+                    preRenderedRegions[key] = renderedRegion
 
-                while currentStart < regionEnd {
-                    let chunkEnd = min(currentStart + chunkDuration, regionEnd)
-                    let chunkDur = chunkEnd - currentStart
-
-                    // Calculate offset into region
-                    let offsetIntoRegion = currentStart - regionStart
-                    let offsetIntoFile = offsetIntoRegion + region.fileStartOffset
-
-                    // Get source buffer
-                    guard let sourceBuffer = regionBuffers[tIndex][region.id.id] else {
-                        print("⚠️ Pre-render: No buffer for region \(region.id.id) on track \(tIndex + 1)")
-                        continue
+                    if tIndex == 0 || tIndex == 1 { // Only log first two tracks to reduce spam
+                        print("   ✅ Pre-rendered: Track \(tIndex + 1), region \(region.sourceURL.lastPathComponent), \(renderedRegion.frameLength) frames (\(String(format: "%.2f", region.duration))s)")
                     }
-
-                    // Render segment with all effects applied
-                    if let renderedSegment = makeSegment(
-                        from: sourceBuffer,
-                        sampleRate: sampleRate,
-                        offsetSeconds: offsetIntoFile,
-                        durationSeconds: chunkDur,
-                        reversed: region.reversed,
-                        fadeIn: region.fadeIn ?? 0,
-                        fadeOut: region.fadeOut ?? 0,
-                        gainDB: region.gainDB ?? 0
-                    ) {
-                        // Cache with unique key
-                        let key = "\(tIndex)-\(region.id.id)-\(currentStart)-\(chunkDur)"
-                        preRenderedSegments[key] = renderedSegment
-
-                        if tIndex == 0 || tIndex == 1 { // Only log first two tracks to reduce spam
-                            print("   ✅ Pre-rendered: Track \(tIndex + 1), [\(String(format: "%.2f", currentStart))s-\(String(format: "%.2f", chunkEnd))s], \(renderedSegment.frameLength) frames")
-                        }
-                    }
-
-                    currentStart = chunkEnd
                 }
             }
         }
@@ -418,127 +406,46 @@ public final class SessionPlayer {
                     continue
                 }
 
-                // Calculate offset: how far into the region's timeline we are
+                // Calculate offset into the pre-rendered region
                 let offsetIntoRegion = segStart - rStart
+                
+                print("   🎬 Extracting from pre-rendered: offset=\(String(format: "%.3f", offsetIntoRegion))s, duration=\(String(format: "%.3f", segDur))s")
 
-                // Apply fileStartOffset for trimming: offset into the actual audio file
-                let offsetIntoFile = offsetIntoRegion + region.fileStartOffset
-                print("   🎬 File read: offsetIntoRegion=\(String(format: "%.3f", offsetIntoRegion))s + fileStartOffset=\(String(format: "%.3f", region.fileStartOffset))s = \(String(format: "%.3f", offsetIntoFile))s")
-
-                // CRITICAL: Handle segments that may span multiple 10-second chunks
-                // We need to stitch together all chunks that overlap this segment
-                let chunkDuration: TimeInterval = 10.0
-                let segmentStartChunk = floor(segStart / chunkDuration) * chunkDuration
-                let segmentEndChunk = floor(segEnd / chunkDuration) * chunkDuration
-
-                // Collect all chunks that overlap this segment
-                var chunksToStitch: [(chunkStart: TimeInterval, buffer: AVAudioPCMBuffer)] = []
-                var currentChunk = segmentStartChunk
-                while currentChunk <= segmentEndChunk {
-                    let chunkKey = "\(tIndex)-\(region.id.id)-\(currentChunk)-\(chunkDuration)"
-                    if let preRendered = preRenderedSegments[chunkKey] {
-                        chunksToStitch.append((currentChunk, preRendered))
-                    }
-                    currentChunk += chunkDuration
+                // Get the pre-rendered ENTIRE region (already has all effects applied)
+                let regionKey = "\(tIndex)-\(region.id.id)"
+                guard let preRenderedRegion = preRenderedRegions[regionKey] else {
+                    print("   ⚠️ No pre-rendered region found for key: \(regionKey)")
+                    continue
                 }
 
-                let slice: AVAudioPCMBuffer
-                if chunksToStitch.count > 0 {
-                    // Stitch chunks together to create the full segment
-                    if chunksToStitch.count == 1 {
-                        // Single chunk - extract the exact portion we need
-                        let (chunkStart, preRendered) = chunksToStitch[0]
-                        let offsetIntoChunk = segStart - chunkStart
-                        let frameOffset = Int(offsetIntoChunk * sr)
-                        let frameCount = Int(segDur * sr)
+                // Extract the specific portion we need from the pre-rendered region
+                let frameOffset = Int(offsetIntoRegion * sr)
+                let frameCount = Int(segDur * sr)
+                
+                guard let slice = extractFrames(from: preRenderedRegion, offset: frameOffset, count: frameCount) else {
+                    print("   ⚠️ Failed to extract frames from pre-rendered region")
+                    continue
+                }
+                
+                print("   🚀 Using pre-rendered region (FAST PATH - no real-time processing)")
 
-                        if let extracted = extractFrames(from: preRendered, offset: frameOffset, count: frameCount) {
-                            slice = extracted
-                            print("   🚀 Using pre-rendered segment (FAST PATH - single chunk)")
-                        } else {
-                            // Fallback to real-time rendering
-                            guard let full = regionBuffers[tIndex][region.id.id],
-                                  let rendered = makeSegment(from: full,
-                                                            sampleRate: sr,
-                                                            offsetSeconds: offsetIntoFile,
-                                                            durationSeconds: segDur,
-                                                            reversed: region.reversed,
-                                                            fadeIn: region.fadeIn ?? 0,
-                                                            fadeOut: region.fadeOut ?? 0,
-                                                            gainDB: region.gainDB ?? 0)
-                            else {
-                                print("   ⚠️ Failed to create segment (extract failed)")
-                                continue
-                            }
-                            slice = rendered
-                            print("   ⚠️ Using real-time rendering (SLOW PATH - extract failed)")
-                        }
-                    } else {
-                        // Multiple chunks - stitch them together
-                        print("   🔗 Stitching \(chunksToStitch.count) pre-rendered chunks")
-
-                        let totalFrames = Int(segDur * sr)
-                        guard let stitched = AVAudioPCMBuffer(pcmFormat: chunksToStitch[0].buffer.format,
-                                                              frameCapacity: AVAudioFrameCount(totalFrames)) else {
-                            print("   ⚠️ Failed to create stitch buffer")
-                            continue
-                        }
-                        stitched.frameLength = AVAudioFrameCount(totalFrames)
-
-                        guard let dstData = stitched.floatChannelData?.pointee else {
-                            print("   ⚠️ Failed to get stitch buffer data")
-                            continue
-                        }
-
-                        var dstOffset = 0
-                        for (chunkStart, chunkBuffer) in chunksToStitch {
-                            // Calculate how much of this chunk we need
-                            let chunkEnd = chunkStart + chunkDuration
-                            let copyStart = max(segStart, chunkStart)
-                            let copyEnd = min(segEnd, chunkEnd)
-                            let copyDur = copyEnd - copyStart
-
-                            if copyDur > 0 {
-                                let srcOffset = Int((copyStart - chunkStart) * sr)
-                                let copyFrames = Int(copyDur * sr)
-
-                                if let extracted = extractFrames(from: chunkBuffer, offset: srcOffset, count: copyFrames) {
-                                    if let srcData = extracted.floatChannelData?.pointee {
-                                        dstData.advanced(by: dstOffset).update(from: srcData, count: Int(extracted.frameLength))
-                                        dstOffset += Int(extracted.frameLength)
-                                    }
-                                }
-                            }
-                        }
-
-                        slice = stitched
-                        print("   🚀 Using stitched pre-rendered segments (FAST PATH - \(chunksToStitch.count) chunks)")
-                    }
+                // CRITICAL FIX: Use contiguous scheduling to eliminate gaps between buffers
+                // If we've already scheduled a buffer on this track in this window,
+                // schedule the next buffer immediately after the previous one
+                let scheduleAtPlayerSamples: AVAudioFramePosition
+                if lastScheduledPlayerSample[tIndex] > 0 {
+                    // Schedule immediately after the previous buffer
+                    scheduleAtPlayerSamples = lastScheduledPlayerSample[tIndex]
+                    print("   🔗 Contiguous scheduling: following previous buffer at sample \(scheduleAtPlayerSamples)")
                 } else {
-                    // Fallback: render in real-time (shouldn't happen if pre-rendering worked)
-                    guard let full = regionBuffers[tIndex][region.id.id],
-                          let rendered = makeSegment(from: full,
-                                                    sampleRate: sr,
-                                                    offsetSeconds: offsetIntoFile,
-                                                    durationSeconds: segDur,
-                                                    reversed: region.reversed,
-                                                    fadeIn: region.fadeIn ?? 0,
-                                                    fadeOut: region.fadeOut ?? 0,
-                                                    gainDB: region.gainDB ?? 0)
-                    else {
-                        print("   ⚠️ Failed to create segment (no pre-render found)")
-                        continue
-                    }
-                    slice = rendered
-                    print("   ⚠️ Using real-time rendering (SLOW PATH - no pre-render)")
+                    // First buffer in this window - use calculated time with lead
+                    let deltaFromPlayhead = segStart - tl.playhead
+                    scheduleAtPlayerSamples = playerSampleNow
+                        + AVAudioFramePosition((scheduleLead + deltaFromPlayhead) * sr)
+                    print("   🎯 First buffer: deltaFromPlayhead=\(String(format: "%.3f", deltaFromPlayhead))s, at player sample \(scheduleAtPlayerSamples)")
                 }
 
-                // Calculate delta from CURRENT playhead position, not basePlayhead
-                let deltaFromPlayhead = segStart - tl.playhead
-                let scheduleAtPlayerSamples = playerSampleNow
-                    + AVAudioFramePosition((scheduleLead + deltaFromPlayhead) * sr)
                 let atTime = AVAudioTime(sampleTime: scheduleAtPlayerSamples, atRate: sr)
-                print("   🎯 Scheduling: deltaFromPlayhead=\(String(format: "%.3f", deltaFromPlayhead))s, at player sample \(scheduleAtPlayerSamples)")
 
                 // Check buffer audio level before scheduling
                 let bufferPeak = slice.peakLevel()
@@ -547,7 +454,11 @@ public final class SessionPlayer {
                 // The buffer format must match the player's input connection format (mono processingFormat)
                 // The audio graph handles mono->stereo conversion at the mixer nodes automatically
                 bus.player.scheduleBuffer(slice, at: atTime, options: [])
-                print("   ✅ Scheduled: segment[\(segStart)s, \(segEnd)s], \(slice.frameLength) frames")
+                print("   ✅ Scheduled: segment[\(segStart)s, \(segEnd)s], \(slice.frameLength) frames at player sample \(scheduleAtPlayerSamples)")
+
+                // Update last scheduled player sample for contiguous scheduling
+                lastScheduledPlayerSample[tIndex] = scheduleAtPlayerSamples + AVAudioFramePosition(slice.frameLength)
+                print("   📍 Next buffer for Track \(tIndex + 1) will start at player sample \(lastScheduledPlayerSample[tIndex])")
 
                 // Update max scheduled time for this track to prevent future overlaps
                 maxScheduledTime[tIndex] = max(maxScheduledTime[tIndex], segEnd)
@@ -587,6 +498,7 @@ public final class SessionPlayer {
         // Reset scheduling tracking for loop (allow rescheduling of loop region)
         maxScheduledTime = [tl.loopStart, tl.loopStart, tl.loopStart, tl.loopStart]
         lastScheduledEndTime = [tl.loopStart, tl.loopStart, tl.loopStart, tl.loopStart]
+        lastScheduledPlayerSample = [0, 0, 0, 0]
 
         // Update timeline's playhead to loop start
         tl.seek(to: tl.loopStart)

@@ -59,11 +59,8 @@ struct DashboardView: View {
                 .scaledToFill()
                 .ignoresSafeArea(edges: .top)
 
-            // Logo
-            Image("logo-light")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 40)
+            // Lottie Logo Animation
+            LottieLogoView()
                 .padding(.vertical, 10)
         }
         .frame(height: 60)

@@ -35,17 +35,16 @@ struct MixesListView: View {
 
     private var listHeader: some View {
         HStack(spacing: 12) {
-            // Title Badge
-            Text("MIXES")
-                .font(.tapelabMonoSmall)
-                .foregroundColor(.tapelabLight)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.tapelabAccentFull.opacity(0.5), lineWidth: 1)
-                )
+            // Title Badge with dot
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.tapelabLight)
+                    .frame(width: 3, height: 3)
+
+                Text("MIXES")
+                    .font(.tapelabMonoSmall)
+                    .foregroundColor(.tapelabLight)
+            }
 
             Spacer()
 

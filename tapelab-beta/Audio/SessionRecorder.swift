@@ -11,18 +11,47 @@ import QuartzCore
 // Debug logging flag - set to false for production
 private let enableDebugLogs = false
 
+enum RecordingError: LocalizedError {
+    case diskSpaceCheckFailed
+    case insufficientDiskSpace(availableMB: Int64)
+    case audioInputNotAvailable
+
+    var errorDescription: String? {
+        switch self {
+        case .diskSpaceCheckFailed:
+            return "Could not check available disk space"
+        case .insufficientDiskSpace(let mb):
+            return "Insufficient disk space: \(mb)MB available. Need at least 100MB to record."
+        case .audioInputNotAvailable:
+            return "Audio input not available"
+        }
+    }
+}
+
 public final class SessionRecorder: ObservableObject {
     weak var engineController: AudioEngineController?
     @Published var inputLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
     @Published var monitorVolume: Float = 0.8 // User-adjustable input monitoring level
 
+    /// Temporary state for active recording - used for UI feedback only
+    /// This is updated from audio thread safely via @Published (MainActor protection)
+    @Published var activeRecording: ActiveRecording? = nil
+
+    struct ActiveRecording {
+        let trackIndex: Int
+        let regionID: RegionID
+        let startTime: TimeInterval
+        var duration: TimeInterval
+        let fileURL: URL
+    }
+
     private var recordingFile: AVAudioFile?
     private var isRecording = false
     private var monitorMixer: AVAudioMixerNode?
     private var recordingStartPlayhead: TimeInterval = 0  // Playhead when recording started
     private var currentRecordingRegionID: RegionID?  // Track the region being recorded
-    private var currentRecordingTrackIndex: Int?  // Track index being recorded
+    private(set) var currentRecordingTrackIndex: Int?  // Track index being recorded (internal access for emergency stop)
 
     // Real-time level monitoring (always active, independent of recording)
     private var meterUpdateTimer: Timer?
@@ -185,8 +214,46 @@ public final class SessionRecorder: ObservableObject {
         return totalLatency
     }
 
+    /// Check if sufficient disk space available for recording
+    /// Requires at least 100MB free space
+    private func checkDiskSpace() throws {
+        guard let documentsPath = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            throw RecordingError.diskSpaceCheckFailed
+        }
+
+        do {
+            let values = try documentsPath.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            guard let capacity = values.volumeAvailableCapacityForImportantUsage else {
+                print("⚠️ Could not determine disk space")
+                return // Don't block recording on check failure
+            }
+
+            let requiredBytes: Int64 = 100 * 1024 * 1024  // 100 MB minimum
+            let availableMB = capacity / 1_048_576
+
+            if capacity < requiredBytes {
+                print("⚠️ Insufficient disk space: \(availableMB)MB available, need 100MB")
+                throw RecordingError.insufficientDiskSpace(availableMB: availableMB)
+            }
+
+            print("✅ Disk space check: \(availableMB)MB available")
+        } catch let error as RecordingError {
+            throw error
+        } catch {
+            print("⚠️ Disk space check error: \(error)")
+            // Don't block recording on check failure
+        }
+    }
+
     func startRecording(session: Session, timeline: TimelineState, trackIndex: Int) async throws -> Session {
         var mutableSession = session
+
+        // CHECK DISK SPACE FIRST
+        try checkDiskSpace()
+
         guard let engine = engineController?.engine else { return mutableSession }
 
         // Remove the continuous monitoring tap before installing recording tap
@@ -226,38 +293,35 @@ public final class SessionRecorder: ObservableObject {
         isRecording = true
         recordingDuration = 0
         recordingStartPlayhead = -1  // Will be set when first buffer arrives
-        print("🎬 Recording armed, waiting for first audio buffer...")
-        
-        // Create temporary region for live display
-        let tempFileURL = fileURL
-        let tempRegionID = RegionID()
-        let tempRegion = Region(
-            id: tempRegionID,
-            sourceURL: tempFileURL,
-            startTime: timeline.playhead,  // Will be updated when first buffer arrives
-            duration: 0,  // Will grow during recording
-            fileStartOffset: 0
-        )
 
-        // Add temporary region to session immediately
-        currentRecordingRegionID = tempRegionID
+        // Create recording metadata for UI (no session modification)
+        let recordingRegionID = RegionID()
+        currentRecordingRegionID = recordingRegionID
         currentRecordingTrackIndex = trackIndex
-        mutableSession.tracks[trackIndex].regions.append(tempRegion)
-        print("📍 Added temporary recording region at playhead: \(String(format: "%.3f", timeline.playhead))s")
 
-        // Notify runtime of session update
-        await MainActor.run {
-            self.onSessionUpdate?(mutableSession)
+        print("🎬 Recording armed, waiting for first audio buffer...")
+
+        // Detect if output is Bluetooth (which forces input buffers to match for sync)
+        let audioSession = AVAudioSession.sharedInstance()
+        let isBluetoothOutput = audioSession.currentRoute.outputs.contains { output in
+            output.portType == .bluetoothA2DP ||
+            output.portType == .bluetoothHFP ||
+            output.portType == .bluetoothLE
         }
 
-        // Install tap - use nil format to match input node's format automatically
-        // Request 512 frames @ 48kHz (~11ms), but iOS may ignore this for Bluetooth
-        print("🔍 Installing tap on input node (requesting 512 frame buffers)...")
+        // Match buffer size to iOS's actual behavior based on output route
+        // Bluetooth forces large buffers even for built-in mic input
+        let bufferSize: AVAudioFrameCount = isBluetoothOutput ? 4800 : 512
+        let expectedCallbackMs = Double(bufferSize) / inputFormat.sampleRate * 1000
+
+        print("🔍 Output route: \(isBluetoothOutput ? "Bluetooth" : "Wired/Built-in")")
+        print("🔍 Requesting \(bufferSize) frame buffers (~\(String(format: "%.1f", expectedCallbackMs))ms per callback)")
+
         var tapCallCount = 0
         var lastTapTime = CACurrentMediaTime()
         var lastBufferSize: AVAudioFrameCount = 0
 
-        input.installTap(onBus: 0, bufferSize: 512, format: inputFormat) { [weak self] (buffer: AVAudioPCMBuffer, time: AVAudioTime) in
+        input.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] (buffer: AVAudioPCMBuffer, time: AVAudioTime) in
             tapCallCount += 1
 
             // Detect when iOS changes buffer size on us (common with Bluetooth)
@@ -275,14 +339,19 @@ public final class SessionRecorder: ObservableObject {
 
             // Expected interval: 512 / 48000 ≈ 10.7ms
             // If interval is > 50ms, we likely dropped buffers
-            if tapCallCount > 1 && timeSinceLastTap > 0.05 {
+            let expectedInterval = Double(buffer.frameLength) / buffer.format.sampleRate
+            let warningThreshold = expectedInterval * 2.0
+
+            if tapCallCount > 1 && timeSinceLastTap > warningThreshold {
                 print("⚠️ TAP CALLBACK GAP DETECTED: \(String(format: "%.1f", timeSinceLastTap * 1000))ms since last callback (expected ~11ms)")
             }
 
             // Log first few callbacks with detailed info
+            // Log first few callbacks with detailed info
             if tapCallCount <= 5 {
                 let expectedMs = (Double(buffer.frameLength) / buffer.format.sampleRate) * 1000
-                print("🔍 Tap callback #\(tapCallCount): \(buffer.frameLength) frames (expected ~\(String(format: "%.1f", expectedMs))ms), actual interval: \(String(format: "%.1f", timeSinceLastTap * 1000))ms")
+                let status = abs(timeSinceLastTap * 1000 - expectedMs) < 10 ? "✅" : "⚠️"
+                print("\(status) Tap callback #\(tapCallCount): \(buffer.frameLength) frames (~\(String(format: "%.1f", expectedMs))ms expected), actual: \(String(format: "%.1f", timeSinceLastTap * 1000))ms")
             }
 
             // Log every 100th callback after initial 5 to monitor long-term stability
@@ -296,15 +365,19 @@ public final class SessionRecorder: ObservableObject {
             // This is the actual recording start time
             if self.recordingStartPlayhead < 0 {
                 self.recordingStartPlayhead = timeline.playhead
-                print("🎬 First buffer arrived! Recording started at playhead: \(String(format: "%.3f", self.recordingStartPlayhead))s")
+                print("🎬 First buffer arrived! Recording started at: \(String(format: "%.3f", self.recordingStartPlayhead))s")
 
-                // Update the temporary region's start time
+                // Initialize activeRecording state for UI (NO session access)
                 if let regionID = self.currentRecordingRegionID,
-                   let trackIdx = self.currentRecordingTrackIndex,
-                   let idx = mutableSession.tracks[trackIdx].regions.firstIndex(where: { $0.id == regionID }) {
-                    mutableSession.tracks[trackIdx].regions[idx].startTime = self.recordingStartPlayhead
+                   let trackIdx = self.currentRecordingTrackIndex {
                     Task { @MainActor in
-                        self.onSessionUpdate?(mutableSession)
+                        self.activeRecording = ActiveRecording(
+                            trackIndex: trackIdx,
+                            regionID: regionID,
+                            startTime: self.recordingStartPlayhead,
+                            duration: 0,
+                            fileURL: file.url
+                        )
                     }
                 }
             }
@@ -320,30 +393,39 @@ public final class SessionRecorder: ObservableObject {
                 do {
                     try file.write(from: buffer)
                     let frames = Double(file.length)
+                    let currentDuration = frames / sampleRate
+
+                    // Periodic disk space check (every 5 seconds)
+                    // ~93 Hz tap rate @ 512 frames, so ~465 calls = ~5 seconds
+                    if tapCallCount % 500 == 0 {
+                        do {
+                            try self.checkDiskSpace()
+                        } catch {
+                            print("⚠️ Disk full during recording: \(error.localizedDescription)")
+                            // Stop recording on main thread
+                            DispatchQueue.main.async {
+                                // Trigger emergency stop
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("DiskFullDuringRecording"),
+                                    object: error
+                                )
+                            }
+                            return  // Stop processing this buffer
+                        }
+                    }
 
                     // Reduce logging frequency to avoid console spam
                     if tapCallCount <= 100 || tapCallCount % 100 == 0 {
-                        print("🎤 Buffer: \(buffer.frameLength) frames, Level: \(String(format: "%.3f", level)) (\(String(format: "%.1f", 20 * log10(max(0.0001, level)))) dB), File: \(frames) frames")
+                        print("🎤 Buffer: \(buffer.frameLength) frames, Level: \(String(format: "%.3f", level)), File: \(frames) frames")
                     }
 
-                    let currentDuration = frames / sampleRate
-
-                    // Update UI on main thread (but don't wait for it)
+                    // Update UI state on main thread (NO session access)
                     DispatchQueue.main.async {
                         self.recordingDuration = currentDuration
 
-                        // Update the temporary region's duration in real-time
-                        if let regionID = self.currentRecordingRegionID,
-                           let trackIdx = self.currentRecordingTrackIndex,
-                           let idx = mutableSession.tracks[trackIdx].regions.firstIndex(where: { $0.id == regionID }) {
-                            mutableSession.tracks[trackIdx].regions[idx].duration = currentDuration
-
-                            // Only trigger session update every 10 buffers to reduce overhead
-                            if tapCallCount % 10 == 0 {
-                                Task { @MainActor in
-                                    self.onSessionUpdate?(mutableSession)
-                                }
-                            }
+                        // Update activeRecording duration for UI
+                        if self.activeRecording?.regionID == self.currentRecordingRegionID {
+                            self.activeRecording?.duration = currentDuration
                         }
 
                         // Explicitly trigger objectWillChange for immediate UI update
@@ -351,6 +433,7 @@ public final class SessionRecorder: ObservableObject {
                     }
                 } catch {
                     print("⚠️ Error writing buffer: \(error)")
+                    // TODO: Add error handling in Phase 2
                 }
             }
         }
@@ -395,21 +478,15 @@ public final class SessionRecorder: ObservableObject {
             startInputLevelMonitoring()
         }
 
-        // Remove the temporary recording region
-        if let regionID = currentRecordingRegionID {
-            if let idx = session.tracks[trackIndex].regions.firstIndex(where: { $0.id == regionID }) {
-                session.tracks[trackIndex].regions.remove(at: idx)
-                print("🗑️ Removed temporary recording region")
-            }
-        }
-
-        // No monitoring to clean up anymore
-
+        // Clean up recording state
         recordingFile = nil
         isRecording = false
         recordingDuration = 0
         currentRecordingRegionID = nil
         currentRecordingTrackIndex = nil
+
+        // Clear UI recording state
+        activeRecording = nil
 
         // Update timeline state to hide recording in UI
         timeline.isRecording = false

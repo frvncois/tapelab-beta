@@ -150,17 +150,16 @@ struct SettingsSectionView<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Badge-style section title (like SessionsListView)
-            Text(title.uppercased())
-                .font(.tapelabMonoSmall)
-                .foregroundColor(.tapelabLight)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.tapelabAccentFull.opacity(0.5), lineWidth: 1)
-                )
+            // Badge-style section title with dot
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.tapelabLight)
+                    .frame(width: 3, height: 3)
+
+                Text(title.uppercased())
+                    .font(.tapelabMonoSmall)
+                    .foregroundColor(.tapelabLight)
+            }
 
             VStack(spacing: 0) {
                 content

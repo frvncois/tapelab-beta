@@ -16,8 +16,6 @@ public enum TimeSignature: String, Codable, CaseIterable {
     case fiveFour = "5/4"
     case sevenFour = "7/4"
     case sixEight = "6/8"
-    case nineEight = "9/8"
-    case fifteenEight = "15/8"
 
     /// Number of beats per measure
     public var beatsPerMeasure: Int {
@@ -27,8 +25,6 @@ public enum TimeSignature: String, Codable, CaseIterable {
         case .fiveFour: return 5
         case .sevenFour: return 7
         case .sixEight: return 6
-        case .nineEight: return 9
-        case .fifteenEight: return 15
         }
     }
 
@@ -37,7 +33,7 @@ public enum TimeSignature: String, Codable, CaseIterable {
         switch self {
         case .threeFour, .fourFour, .fiveFour, .sevenFour:
             return 4
-        case .sixEight, .nineEight, .fifteenEight:
+        case .sixEight:
             return 8
         }
     }

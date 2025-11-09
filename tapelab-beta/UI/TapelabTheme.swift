@@ -12,7 +12,7 @@ extension Color {
     // Brand Colors
     static let tapelabDark = Color(hex: "1D1613")
     static let tapelabBlack = Color(hex: "17120F")
-    static let tapelabAccentFull = Color(hex: "C3B9A1") // Full opacity version for buttons
+    static let tapelabAccentFull = Color(hex: "#FFE9B4") // Full opacity version for buttons
     static let tapelabAccent = Color(hex: "C3B9A1", opacity: 0.1) // 10% opacity version
     static let tapelabRed = Color(hex: "EB3933")
     static let tapelabGreen = Color(hex: "4A9147")

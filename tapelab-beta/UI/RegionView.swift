@@ -87,8 +87,10 @@ struct RegionView: View {
     }
 
     private var regionBackgroundColor: Color {
-        // Red if currently recording, accent for recorded regions - with 10% opacity
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // Orange if selected, red if currently recording, accent for normal regions
+        if isRegionSelected {
+            return Color.tapelabOrange.opacity(0.25)
+        } else if let timeline = timeline, isRecordingTrack && timeline.isRecording {
             return Color.tapelabRed.opacity(0.1)
         } else {
             return Color.tapelabAccent
@@ -96,8 +98,10 @@ struct RegionView: View {
     }
 
     private var regionBorderColor: Color {
-        // Full opacity border
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // Orange if selected, red if currently recording, accent for normal regions
+        if isRegionSelected {
+            return Color.tapelabOrange
+        } else if let timeline = timeline, isRecordingTrack && timeline.isRecording {
             return Color.tapelabRed
         } else {
             return Color.tapelabAccentFull
@@ -202,8 +206,8 @@ struct RegionView: View {
                     enterTrimMode()
                 }
             }
-            .simultaneousGesture(!isTrimMode && !isRegionSelected ? dragGesture : nil)
-            .onTapGesture(count: 2) {
+            .simultaneousGesture(!isTrimMode ? dragGesture : nil)
+            .onTapGesture(count: 1) {
                 guard let timeline = timeline else { return }
                 guard timeline.isRecording != true else { return }
 
@@ -244,7 +248,7 @@ struct RegionView: View {
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(regionBorderColor, lineWidth: isDragging || isTrimMode || isRegionSelected ? 2 : 1)
+                .stroke(regionBorderColor, lineWidth: isDragging || isTrimMode ? 2 : 1)
         )
         .overlay(
             isDragging ?

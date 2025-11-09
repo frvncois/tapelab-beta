@@ -36,7 +36,7 @@ struct TimelineView: View {
                     let trackHeight = tracks.count > 0 ? availableHeight / CGFloat(tracks.count) : 0
 
                     // Single scrollable area containing ruler and tracks
-                    ScrollView(.horizontal, showsIndicators: true) {
+                    ScrollView(.horizontal, showsIndicators: false) {
                         VStack(spacing: 0) {
                             // Time ruler (scrolls with content)
                             TimelineRulerView(
@@ -142,7 +142,7 @@ struct TimelineView: View {
                 }
 
             // Regions
-            ForEach(tracks[index].regions.indices, id: \.self) { regionIndex in
+            ForEach(Array(tracks[index].regions.enumerated()), id: \.element.id.id) { regionIndex, region in
                 RegionView(
                     region: $tracks[index].regions[regionIndex],
                     pixelsPerSecond: pixelsPerSecond,
@@ -153,28 +153,34 @@ struct TimelineView: View {
                     timeline: timeline,
                     isRecordingTrack: armedTrack == index + 1 && timeline.isRecording,
                     onPositionChanged: { newStartTime in
-                        // Update region position
-                        runtime.updateRegionPosition(
-                            trackIndex: index,
-                            regionIndex: regionIndex,
-                            newStartTime: newStartTime
-                        )
+                        // Update region position - find current index by ID
+                        if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
+                            runtime.updateRegionPosition(
+                                trackIndex: index,
+                                regionIndex: currentIndex,
+                                newStartTime: newStartTime
+                            )
+                        }
                     },
                     onTrimChanged: { newDuration, newFileStartOffset in
-                        // Update region trim
-                        runtime.updateRegionTrim(
-                            trackIndex: index,
-                            regionIndex: regionIndex,
-                            newDuration: newDuration,
-                            newFileStartOffset: newFileStartOffset
-                        )
+                        // Update region trim - find current index by ID
+                        if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
+                            runtime.updateRegionTrim(
+                                trackIndex: index,
+                                regionIndex: currentIndex,
+                                newDuration: newDuration,
+                                newFileStartOffset: newFileStartOffset
+                            )
+                        }
                     },
                     onDelete: {
-                        // Delete region
-                        runtime.deleteRegion(
-                            trackIndex: index,
-                            regionIndex: regionIndex
-                        )
+                        // Delete region - find current index by ID
+                        if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
+                            runtime.deleteRegion(
+                                trackIndex: index,
+                                regionIndex: currentIndex
+                            )
+                        }
                     },
                     getRegionBuffer: { trackIdx, regionID in
                         // Access buffer through runtime's player, passing current session
@@ -185,7 +191,30 @@ struct TimelineView: View {
                         )
                     }
                 )
-                .id(tracks[index].regions[regionIndex].id.id) // Force new view when region ID changes
+                .id(region.id.id) // Force new view when region ID changes
+            }
+
+            // Active recording overlay (if recording on this track)
+            if let activeRecording = runtime.recorder.activeRecording,
+               activeRecording.trackIndex == index {
+                ZStack(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(Color.red.opacity(0.3))
+                        .cornerRadius(4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .stroke(Color.red, lineWidth: 2)
+                        )
+                }
+                .frame(
+                    width: max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40),
+                    height: 60
+                )
+                .position(
+                    x: CGFloat(activeRecording.startTime) * pixelsPerSecond + (max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40) / 2),
+                    y: 58 + 30  // 58pt top offset (matching RegionView) + 30pt (half of 60pt height)
+                )
+                .allowsHitTesting(false) // Don't intercept touches
             }
         }
         .frame(height: height)

@@ -21,6 +21,11 @@ public final class AudioRuntime: ObservableObject {
     @Published var processingMessage: String = ""
     let metronome = Metronome()
 
+    // Alert state
+    @Published var alertTitle: String = ""
+    @Published var alertMessage: String = ""
+    @Published var showAlert: Bool = false
+
     private var autoSaveTask: Task<Void, Never>?
 
     init() {
@@ -34,7 +39,88 @@ public final class AudioRuntime: ObservableObject {
             self.objectWillChange.send()
         }
 
+        // Observe audio route disconnections
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AudioDeviceDisconnected"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+
+            if self.timeline.isRecording,
+               let trackIndex = self.recorder.currentRecordingTrackIndex {
+                print("⚠️ Audio device disconnected during recording - stopping")
+
+                // Stop recording immediately
+                Task { @MainActor in
+                    self.stopRecording(onTrack: trackIndex)
+
+                    // Alert user
+                    self.showAlert(
+                        title: "Recording Stopped",
+                        message: "Your audio device was disconnected. The recording has been saved."
+                    )
+                }
+            }
+        }
+
+        // Observe disk full during recording
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("DiskFullDuringRecording"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let error = notification.object as? Error else { return }
+
+            if self.timeline.isRecording,
+               let trackIndex = self.recorder.currentRecordingTrackIndex {
+                print("⚠️ Disk full during recording - emergency stop")
+
+                Task { @MainActor in
+                    self.stopRecording(onTrack: trackIndex)
+
+                    self.showAlert(
+                        title: "Disk Full",
+                        message: error.localizedDescription + " Recording has been stopped and saved."
+                    )
+                }
+            }
+        }
+
+        // Observe audio interruptions (phone calls, Siri, etc)
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AudioInterruptionBegan"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+
+            if self.timeline.isRecording,
+               let trackIndex = self.recorder.currentRecordingTrackIndex {
+                print("⚠️ Interruption during recording - stopping")
+                Task { @MainActor in
+                    self.stopRecording(onTrack: trackIndex)
+                    self.showAlert(
+                        title: "Recording Interrupted",
+                        message: "Recording was stopped due to interruption (call, Siri, etc). Your recording has been saved."
+                    )
+                }
+            } else if self.timeline.isPlaying {
+                self.stopPlayback(resetPlayhead: false)
+            }
+        }
+
         print("🎛️ Audio runtime initialized (4-track engine)")
+    }
+
+    // MARK: - Alert Helper
+
+    private func showAlert(title: String, message: String) {
+        alertTitle = title
+        alertMessage = message
+        showAlert = true
+        print("📢 ALERT: \(title) - \(message)")
     }
 
     /// Auto-save session with debouncing to avoid excessive writes
@@ -314,6 +400,16 @@ public final class AudioRuntime: ObservableObject {
 
         let region = session.tracks[trackIndex].regions[regionIndex]
         print("🗑️ Deleting region \(regionIndex) on track \(trackIndex + 1): \(region.sourceURL.lastPathComponent)")
+
+        // Clear selection states if this region is selected or in trim mode
+        if let selected = timeline.selectedRegion,
+           selected.trackIndex == trackIndex && selected.regionIndex == regionIndex {
+            timeline.selectedRegion = nil
+        }
+        if let trimMode = timeline.trimModeRegion,
+           trimMode.trackIndex == trackIndex && trimMode.regionIndex == regionIndex {
+            timeline.trimModeRegion = nil
+        }
 
         // Remove region from session
         session.tracks[trackIndex].regions.remove(at: regionIndex)

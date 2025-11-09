@@ -13,17 +13,20 @@ private let enableDebugLogs = false
 @MainActor
 public final class AudioEngineController: ObservableObject {
     // DEBUG FLAGS - Set these to test different configurations
-    static let DISABLE_LIMITER = false       // Set to true to bypass limiter (test for limiter-induced clicks)
-    static let USE_SINGLE_TRACK_ONLY = false // Set to true to test with only Track 1 (test format conversion issues)
+    static let DISABLE_LIMITER = true        // CHANGED: Test without limiter
+    static let USE_SINGLE_TRACK_ONLY = false
 
     let engine = AVAudioEngine()
     let mainMixer: AVAudioMixerNode
-    let limiter: AVAudioUnitEffect // Master limiter to prevent clipping
-    let inputMixer: AVAudioMixerNode // Mixer for input node (keeps it initialized)
+    let limiter: AVAudioUnitEffect
+    let inputMixer: AVAudioMixerNode
     let sampleRate: Double
     let processingFormat: AVAudioFormat
     let stereoFormat: AVAudioFormat
     private(set) var trackBuses: [TrackBus] = []
+
+    // Audio route change observer
+    private var routeChangeObserver: NSObjectProtocol?
 
     init(trackCount: Int = 4) {
         // Configure audio session FIRST before reading formats
@@ -38,17 +41,14 @@ public final class AudioEngineController: ObservableObject {
         print("🔍 Output node format: \(detectedSampleRate)Hz, \(outputFormat.channelCount) channels")
 
         // CRITICAL: Handle case where output format is invalid (0Hz)
-        // This can happen if audio session configuration failed
         if detectedSampleRate <= 0 || detectedSampleRate > 192000 {
             print("⚠️ Invalid output format detected (\(detectedSampleRate)Hz)")
             print("⚠️ Attempting to start engine to initialize output node...")
 
-            // Try starting the engine which may initialize the output node
             do {
                 try engine.start()
                 engine.stop()
 
-                // Re-read output format
                 let retryFormat = engine.outputNode.outputFormat(forBus: 0)
                 detectedSampleRate = retryFormat.sampleRate
                 print("🔍 After engine start: \(detectedSampleRate)Hz, \(retryFormat.channelCount) channels")
@@ -56,9 +56,8 @@ public final class AudioEngineController: ObservableObject {
                 print("⚠️ Could not start engine: \(error)")
             }
 
-            // If still invalid, use fallback
             if detectedSampleRate <= 0 || detectedSampleRate > 192000 {
-                detectedSampleRate = 48000  // Fallback to 48kHz
+                detectedSampleRate = 48000
                 print("⚠️ Using fallback sample rate: \(detectedSampleRate)Hz")
             }
         }
@@ -75,7 +74,7 @@ public final class AudioEngineController: ObservableObject {
         print("🔍 Processing format: \(processingFormat.sampleRate)Hz, \(processingFormat.channelCount) channels")
         print("🔍 Stereo format: \(stereoFormat.sampleRate)Hz, \(stereoFormat.channelCount) channels")
 
-        // Create limiter (inline to avoid method call before init)
+        // Create limiter
         let limiterDesc = AudioComponentDescription(
             componentType: kAudioUnitType_Effect,
             componentSubType: kAudioUnitSubType_PeakLimiter,
@@ -90,13 +89,10 @@ public final class AudioEngineController: ObservableObject {
         engine.attach(inputMixer)
 
         // CRITICAL: Connect input node to input mixer to force initialization
-        // This keeps the input node initialized and ready for recording
-        // Set volume to 0 so we don't hear the input during playback
         inputMixer.outputVolume = 0
         engine.connect(engine.inputNode, to: inputMixer, format: nil)
         print("🔍 Connected input node to input mixer (volume=0) to force initialization")
 
-        // Respect single track debug flag
         let actualTrackCount = Self.USE_SINGLE_TRACK_ONLY ? 1 : trackCount
         setupTracks(count: actualTrackCount)
 
@@ -114,16 +110,15 @@ public final class AudioEngineController: ObservableObject {
         if Self.USE_SINGLE_TRACK_ONLY {
             print("⚠️  SINGLE TRACK MODE (DEBUG) - Only Track 1 active")
         }
+
+        setupAudioObservers()
     }
 
     private static func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // CRITICAL: Try playback-only category first if playAndRecord fails
-            // This handles cases where microphone permissions aren't granted yet
             var categorySet = false
 
-            // Try playAndRecord first (for recording capability)
             do {
                 try session.setCategory(.playAndRecord, mode: .default,
                                        options: [.allowBluetoothA2DP])
@@ -132,7 +127,6 @@ public final class AudioEngineController: ObservableObject {
             } catch {
                 print("⚠️ Could not set playAndRecord category: \(error)")
                 print("   Falling back to playback-only mode...")
-                // Fallback to playback-only
                 try session.setCategory(.playback, mode: .default,
                                        options: [.allowBluetoothA2DP])
                 categorySet = true
@@ -147,8 +141,7 @@ public final class AudioEngineController: ObservableObject {
             // CRITICAL: Set sample rate BEFORE activation
             try session.setPreferredSampleRate(48000)
 
-            // CRITICAL: Force iPhone built-in microphone at startup (only for playAndRecord)
-            // This must be done BEFORE activating the session
+            // CRITICAL: Force iPhone built-in microphone at startup
             if session.category == .playAndRecord {
                 let availableInputs = session.availableInputs ?? []
                 if let builtInMic = availableInputs.first(where: { $0.portType == .builtInMic }) {
@@ -159,7 +152,7 @@ public final class AudioEngineController: ObservableObject {
                 }
             }
 
-            // Detect if output OR input is Bluetooth before activation
+            // Detect Bluetooth
             let currentRoute = session.currentRoute
             let isBluetoothOutput = currentRoute.outputs.contains { output in
                 output.portType == .bluetoothA2DP ||
@@ -172,31 +165,31 @@ public final class AudioEngineController: ObservableObject {
             }
             let isBluetoothAny = isBluetoothOutput || isBluetoothInput
 
-            // Set preferred buffer duration - adjust for Bluetooth
-            // Bluetooth needs MUCH larger buffer due to compression and variable latency
+            // CHANGED: More aggressive buffer size for Bluetooth to prevent dropouts
             let bufferDuration: TimeInterval
             if isBluetoothAny {
-                bufferDuration = 0.050  // 50ms for Bluetooth (up from 20ms)
-                print("🔵 Bluetooth detected - requesting 50ms buffer for stability")
+                bufferDuration = 0.100  // CHANGED: 100ms for Bluetooth (was 50ms)
+                print("🔵 Bluetooth detected - requesting 100ms buffer for maximum stability")
                 if isBluetoothInput {
                     print("⚠️ WARNING: Bluetooth microphone detected - input tap may be unreliable")
                 }
             } else {
-                bufferDuration = 0.010  // 10ms for wired
-                print("🔌 Wired audio - requesting 10ms buffer")
+                bufferDuration = 0.020  // CHANGED: 20ms for wired (was 10ms)
+                print("🔌 Wired audio - requesting 20ms buffer")
             }
             try session.setPreferredIOBufferDuration(bufferDuration)
 
-            // Verify what we actually got - iOS may not honor our request
+            // Verify what we actually got
             let actualBufferDuration = session.ioBufferDuration
             if abs(actualBufferDuration - bufferDuration) > 0.005 {
                 print("⚠️ Buffer duration mismatch: requested \(String(format: "%.1f", bufferDuration * 1000))ms, got \(String(format: "%.1f", actualBufferDuration * 1000))ms")
+                print("   iOS may override our request - this is normal")
             }
 
             // Activate the session
             try session.setActive(true)
 
-            print("🎚️ Audio session configured: \(session.sampleRate)Hz, \(session.ioBufferDuration)s buffer")
+            print("🎚️ Audio session configured: \(session.sampleRate)Hz, \(String(format: "%.1f", session.ioBufferDuration * 1000))ms buffer")
             print("🔍 Requested: 48000Hz, Got: \(session.sampleRate)Hz")
             print("🔍 Input route: \(session.currentRoute.inputs.first?.portName ?? "unknown")")
             print("🔍 Output route: \(session.currentRoute.outputs.first?.portName ?? "unknown")")
@@ -240,12 +233,9 @@ public final class AudioEngineController: ObservableObject {
         }
     }
 
-    /// Force reactivate audio session to fix Bluetooth A2DP routing issues
-    /// Call this after stopping/restarting the engine during playback modifications
     func reactivateAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            // Deactivate and immediately reactivate to force iOS to reconnect Bluetooth output
             try session.setActive(false, options: .notifyOthersOnDeactivation)
             try session.setActive(true)
             print("🔄 Audio session reactivated")
@@ -260,8 +250,6 @@ public final class AudioEngineController: ObservableObject {
         print("⏸️ Audio engine stopped")
     }
 
-    /// Diagnostic function to identify audio issues (clicks, pops, dropouts)
-    /// Call this periodically during playback to monitor audio health
     func diagnoseAudioIssues() {
         guard enableDebugLogs else { return }
 
@@ -315,5 +303,95 @@ public final class AudioEngineController: ObservableObject {
         }
 
         print("🔍 ═══════════════════════════════════════")
+    }
+
+    // MARK: - Audio Route Change Handling
+
+    private func setupAudioObservers() {
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleRouteChange(notification)
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let userInfo = notification.userInfo,
+                  let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+                return
+            }
+
+            switch type {
+            case .began:
+                print("🛑 Audio interrupted (phone call, Siri, etc)")
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("AudioInterruptionBegan"),
+                    object: nil
+                )
+
+            case .ended:
+                print("▶️ Audio interruption ended")
+                guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else {
+                    return
+                }
+                let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+                if options.contains(.shouldResume) {
+                    print("   System suggests resuming audio")
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("AudioInterruptionEnded"),
+                        object: options
+                    )
+                }
+
+            @unknown default:
+                break
+            }
+        }
+
+        print("🔔 Audio route change and interruption observers installed")
+    }
+
+    private func handleRouteChange(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+
+        let session = AVAudioSession.sharedInstance()
+        let newRoute = session.currentRoute
+
+        switch reason {
+        case .oldDeviceUnavailable:
+            print("⚠️ Audio device disconnected!")
+            print("   Previous route: \(userInfo[AVAudioSessionRouteChangePreviousRouteKey] ?? "unknown")")
+            print("   New route: \(newRoute.outputs.first?.portName ?? "unknown")")
+
+            NotificationCenter.default.post(
+                name: NSNotification.Name("AudioDeviceDisconnected"),
+                object: nil
+            )
+
+        case .newDeviceAvailable:
+            print("🔌 New audio device connected: \(newRoute.outputs.first?.portName ?? "unknown")")
+
+        case .categoryChange:
+            print("🔄 Audio category changed")
+
+        default:
+            break
+        }
+    }
+
+    deinit {
+        if let observer = routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 }

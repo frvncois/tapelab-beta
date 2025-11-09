@@ -16,6 +16,7 @@ struct MetronomeSheetView: View {
     @State private var countInEnabled: Bool = true
     @State private var playWhileRecording: Bool = false
     @State private var lastSliderHapticTime = Date()
+    @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
         NavigationView {
@@ -26,18 +27,32 @@ struct MetronomeSheetView: View {
                     .foregroundColor(.tapelabLight)
                     .padding(.top)
 
-                Spacer()
+                // BPM Display - Pulsing Circle
+                ZStack {
+                    // Animated pulse circle
+                    Circle()
+                        .stroke(Color.tapelabAccentFull, lineWidth: 2)
+                        .frame(width: 160, height: 160)
+                        .scaleEffect(pulseScale)
+                        .animation(.easeInOut(duration: 60.0 / localBPM), value: pulseScale)
 
-                // BPM Display
-                VStack(spacing: 8) {
-                    Text("\(Int(localBPM))")
-                        .font(.system(size: 72, weight: .bold, design: .monospaced))
-                        .foregroundColor(.tapelabAccentFull)
+                    // Background circle
+                    Circle()
+                        .fill(Color.tapelabLight.opacity(0.1))
+                        .frame(width: 160, height: 160)
 
-                    Text("BPM")
-                        .font(.tapelabMono)
-                        .foregroundColor(.tapelabLight)
+                    // BPM text
+                    VStack(spacing: 4) {
+                        Text("\(Int(localBPM))")
+                            .font(.system(size: 52, weight: .bold, design: .monospaced))
+                            .foregroundColor(.tapelabAccentFull)
+
+                        Text("BPM")
+                            .font(.tapelabMonoSmall)
+                            .foregroundColor(.tapelabLight)
+                    }
                 }
+                .padding(.vertical, 16)
 
                 // BPM Slider
                 VStack(spacing: 8) {
@@ -68,14 +83,14 @@ struct MetronomeSheetView: View {
                     .padding(.horizontal, 32)
                 }
 
-                // Time Signature Picker - Segmented Control Style
+                // Time Signature Picker - Brand Theme Style
                 VStack(spacing: 12) {
                     Text("Time Signature")
                         .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
 
-                    // Segmented control style - all options in one row
-                    HStack(spacing: 0) {
+                    // Horizontal layout with brand-themed buttons
+                    HStack(spacing: 12) {
                         ForEach(TimeSignature.allCases, id: \.self) { sig in
                             Button(action: {
                                 localTimeSignature = sig
@@ -84,20 +99,21 @@ struct MetronomeSheetView: View {
                                 HapticsManager.shared.effectToggled()
                             }) {
                                 Text(sig.displayName)
-                                    .font(.tapelabMono)
-                                    .foregroundColor(localTimeSignature == sig ? .tapelabBackground : .tapelabLight)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 44)
-                                    .background(localTimeSignature == sig ? Color.tapelabAccentFull : Color.tapelabAccent)
+                                    .font(.tapelabMonoSmall)
+                                    .lineLimit(1)
+                                    .foregroundColor(localTimeSignature == sig ? .tapelabAccentFull : .tapelabLight)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(localTimeSignature == sig ? Color.tapelabButtonBg.opacity(0.8) : Color.tapelabButtonBg)
+                                    .cornerRadius(16)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(localTimeSignature == sig ? Color.tapelabAccentFull : Color.clear, lineWidth: 1)
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.tapelabAccentFull, lineWidth: 1)
-                    )
                     .padding(.horizontal, 32)
                 }
 
@@ -144,10 +160,9 @@ struct MetronomeSheetView: View {
                     }
                 }
                 .padding(.horizontal, 32)
-
-                Spacer()
+                .padding(.bottom, 24)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
             .background(Color.tapelabBackground)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -177,6 +192,9 @@ struct MetronomeSheetView: View {
             Task {
                 await runtime.metronome.play()
             }
+
+            // Start pulse animation
+            startPulseAnimation()
         }
         .onDisappear {
             // Apply all changes to session when sheet closes
@@ -187,6 +205,25 @@ struct MetronomeSheetView: View {
 
             // Stop metronome when sheet closes
             runtime.metronome.stop()
+        }
+    }
+
+    // MARK: - Pulse Animation
+
+    private func startPulseAnimation() {
+        // Create repeating pulse based on BPM
+        let beatDuration = 60.0 / localBPM
+
+        withAnimation(.easeInOut(duration: beatDuration / 2)) {
+            pulseScale = 1.15
+        }
+
+        // Schedule repeating pulse
+        Timer.scheduledTimer(withTimeInterval: beatDuration, repeats: true) { _ in
+            pulseScale = 1.0
+            withAnimation(.easeInOut(duration: beatDuration / 2)) {
+                pulseScale = 1.15
+            }
         }
     }
 }
