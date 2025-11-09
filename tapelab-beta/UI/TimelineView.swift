@@ -197,6 +197,7 @@ struct TimelineView: View {
             // Active recording overlay (if recording on this track)
             if let activeRecording = runtime.recorder.activeRecording,
                activeRecording.trackIndex == index {
+                let recordingWidth = max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40)
                 ZStack(alignment: .topLeading) {
                     Rectangle()
                         .fill(Color.red.opacity(0.3))
@@ -207,11 +208,12 @@ struct TimelineView: View {
                         )
                 }
                 .frame(
-                    width: max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40),
+                    width: recordingWidth,
                     height: 60
                 )
+                .animation(.linear(duration: 0.016), value: recordingWidth) // Smooth 60fps animation
                 .position(
-                    x: CGFloat(activeRecording.startTime) * pixelsPerSecond + (max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40) / 2),
+                    x: CGFloat(activeRecording.startTime) * pixelsPerSecond + (recordingWidth / 2),
                     y: 58 + 30  // 58pt top offset (matching RegionView) + 30pt (half of 60pt height)
                 )
                 .allowsHitTesting(false) // Don't intercept touches

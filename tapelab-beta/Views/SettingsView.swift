@@ -16,13 +16,11 @@ struct SettingsView: View {
                         SettingsRowView(
                             icon: "questionmark.circle",
                             title: "Help Center",
-                            subtitle: "Tutorials and guides",
                             action: {}
                         )
                         SettingsRowView(
                             icon: "envelope",
                             title: "Contact Support",
-                            subtitle: "Get help from our team",
                             showSeparator: false,
                             action: {}
                         )
@@ -33,19 +31,16 @@ struct SettingsView: View {
                         SettingsRowView(
                             icon: "info.circle",
                             title: "About Tapelab",
-                            subtitle: "Version 1.0.0",
                             action: {}
                         )
                         SettingsRowView(
                             icon: "doc.text",
                             title: "Terms of Service",
-                            subtitle: "Legal information",
                             action: {}
                         )
                         SettingsRowView(
                             icon: "hand.raised",
                             title: "Privacy Policy",
-                            subtitle: "How we handle your data",
                             showSeparator: false,
                             action: {}
                         )
@@ -127,7 +122,7 @@ struct ProFeatureRow: View {
                 .frame(width: 24, height: 24)
 
             Text(label)
-                .font(.tapelabMono)
+                .font(.tapelabMonoSmall)
                 .foregroundColor(.tapelabLight)
 
             Spacer()
@@ -173,14 +168,12 @@ struct SettingsSectionView<Content: View>: View {
 struct SettingsRowView: View {
     let icon: String
     let title: String
-    let subtitle: String
     let action: () -> Void
     let showSeparator: Bool
 
-    init(icon: String, title: String, subtitle: String, showSeparator: Bool = true, action: @escaping () -> Void) {
+    init(icon: String, title: String, showSeparator: Bool = true, action: @escaping () -> Void) {
         self.icon = icon
         self.title = title
-        self.subtitle = subtitle
         self.showSeparator = showSeparator
         self.action = action
     }
@@ -192,19 +185,13 @@ struct SettingsRowView: View {
                     // Icon
                     Image(systemName: icon)
                         .font(.system(size: 16))
-                        .foregroundColor(TapelabTheme.Colors.accent)
+                        .foregroundColor(.tapelabLight)
                         .frame(width: 24, height: 24)
 
                     // Text content
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.tapelabMono)
-                            .foregroundColor(TapelabTheme.Colors.text)
-
-                        Text(subtitle)
-                            .font(TapelabTheme.Typography.caption)
-                            .foregroundColor(TapelabTheme.Colors.textSecondary)
-                    }
+                    Text(title)
+                        .font(.tapelabMono)
+                        .foregroundColor(TapelabTheme.Colors.text)
 
                     Spacer()
 
@@ -221,7 +208,7 @@ struct SettingsRowView: View {
             // Separator
             if showSeparator {
                 Divider()
-                    .background(TapelabTheme.Colors.background)
+                    .background(Color.tapelabDark)
             }
         }
     }

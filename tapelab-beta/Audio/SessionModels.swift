@@ -162,7 +162,7 @@ public struct Session: Codable, Identifiable {
                 createdAt: Date = Date(),
                 bpm: Double = 120,
                 timeSignature: TimeSignature = .fourFour,
-                metronomeCountIn: Bool = true,
+                metronomeCountIn: Bool = false,
                 metronomeWhileRecording: Bool = false,
                 tracks: [Track] = (1...4).map { Track(number: $0, isArmed: $0 == 1) }) {
         self.id = id

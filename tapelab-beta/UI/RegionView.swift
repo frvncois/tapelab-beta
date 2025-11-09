@@ -230,6 +230,7 @@ struct RegionView: View {
             )
             .frame(width: max(width, 40), height: 60)
             .cornerRadius(4)
+            .animation(.linear(duration: 0.016), value: width) // Smooth 60fps animation
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Region \(regionIndex + 1)")
@@ -245,6 +246,7 @@ struct RegionView: View {
             .frame(width: max(width, 40), height: 60, alignment: .topLeading)
         }
         .frame(width: max(width, 40), height: 60, alignment: .topLeading)
+        .animation(.linear(duration: 0.016), value: width) // Smooth 60fps animation
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
