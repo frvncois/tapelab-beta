@@ -46,6 +46,17 @@ struct MixesListView: View {
             PlayerView(mix: mix, allMixes: mixMetadata)
                 .environmentObject(runtime)
         }
+        .onChange(of: selectedMix) { oldValue, newValue in
+            if newValue != nil {
+                // Suspend engine BEFORE presenting PlayerView
+                print("🎵 MixesListView: Suspending engine for PlayerView")
+                runtime.suspendForExternalPlayback()
+            } else if oldValue != nil && newValue == nil {
+                // Resume engine AFTER PlayerView dismisses
+                print("🎵 MixesListView: Resuming engine after PlayerView")
+                runtime.resumeAfterExternalPlayback()
+            }
+        }
     }
 
     private var listHeader: some View {

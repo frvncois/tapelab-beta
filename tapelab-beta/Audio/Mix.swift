@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a bounced stereo mix from a session
-struct Mix: Identifiable, Codable {
+struct Mix: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
     let sessionId: UUID

@@ -205,16 +205,10 @@ struct PlayerView: View {
         .navigationBarHidden(true)
         .onAppear {
             loadCurrentMix()
-
-            // CRITICAL: Stop main engine first to free audio session
-            runtime.suspendForExternalPlayback()
         }
         .onDisappear {
             print("🎵 PlayerView disappeared")
             player.stop()
-
-            // CRITICAL: Resume main engine
-            runtime.resumeAfterExternalPlayback()
         }
         .onChange(of: currentMix.id) { _, _ in
             loadCurrentMix()
@@ -374,41 +368,11 @@ class MixPlayer: ObservableObject {
             return
         }
 
-        // Configure audio session for playback FIRST
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
+        // DON'T configure audio session - it's already been suspended by MixesListView
+        // and is in the correct state (.playback category, inactive)
+        // AVAudioPlayer will activate it automatically when play() is called
 
-            // Ensure session is inactive first
-            try audioSession.setActive(false)
-
-            // Set to playback with Bluetooth support
-            try audioSession.setCategory(
-                .playback,
-                mode: .default,
-                options: [.allowBluetoothA2DP, .allowAirPlay, .duckOthers]
-            )
-
-            // Activate
-            try audioSession.setActive(true)
-
-            print("✅ Audio session configured for playback")
-            print("   Category: \(audioSession.category.rawValue)")
-            print("   Sample rate: \(audioSession.sampleRate)Hz")
-            print("   Output route: \(audioSession.currentRoute.outputs.first?.portName ?? "unknown")")
-            print("   Output port type: \(audioSession.currentRoute.outputs.first?.portType.rawValue ?? "unknown")")
-
-            // Verify we have Bluetooth output
-            let hasBluetoothOutput = audioSession.currentRoute.outputs.contains { output in
-                output.portType == .bluetoothA2DP || output.portType == .bluetoothLE
-            }
-            print("   Has Bluetooth output: \(hasBluetoothOutput)")
-
-        } catch {
-            print("⚠️ Failed to configure audio session: \(error)")
-            return
-        }
-
-        // Now try to load the audio file
+        // Load the audio file
         do {
             print("🎵 Creating AVAudioPlayer...")
             audioPlayer = try AVAudioPlayer(contentsOf: url)
@@ -446,22 +410,14 @@ class MixPlayer: ObservableObject {
     }
 
     func play() {
-        do {
-            // Ensure audio session is active before playing
-            let audioSession = AVAudioSession.sharedInstance()
-            if !audioSession.isOtherAudioPlaying {
-                try audioSession.setActive(true)
-            }
-
-            audioPlayer?.play()
-            isPlaying = true
-            startTimer()
-            print("▶️ Playing mix")
-            print("🎵 Player isPlaying: \(audioPlayer?.isPlaying ?? false)")
-            print("🎵 Player duration: \(audioPlayer?.duration ?? 0)s")
-        } catch {
-            print("⚠️ Failed to activate audio session: \(error)")
-        }
+        // AVAudioPlayer automatically activates the audio session when play() is called
+        // No need to do it manually - this can cause conflicts
+        audioPlayer?.play()
+        isPlaying = true
+        startTimer()
+        print("▶️ Playing mix")
+        print("🎵 Player isPlaying: \(audioPlayer?.isPlaying ?? false)")
+        print("🎵 Player duration: \(audioPlayer?.duration ?? 0)s")
     }
 
     func pause() {
