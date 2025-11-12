@@ -419,8 +419,16 @@ class SessionBouncer {
                 stereoFormat: stereoFormat
             )
 
-            // Connect track mixer to main mixer in stereo
-            engine.connect(trackBus.mixer, to: mainMixer, format: stereoFormat)
+            // Mono format for track output
+            guard let monoFormat = AVAudioFormat(
+                standardFormatWithSampleRate: stereoFormat.sampleRate,
+                channels: 1
+            ) else {
+                throw BounceError.invalidAudioFormat
+            }
+
+            // Connect track mixer to main mixer in MONO (mainMixer converts to stereo)
+            engine.connect(trackBus.mixer, to: mainMixer, format: monoFormat)
 
             // Store for later scheduling (AFTER manual rendering is enabled)
             trackPlayers.append((track: track, player: trackBus.player))
@@ -453,14 +461,14 @@ class SessionBouncer {
             throw BounceError.invalidAudioFormat
         }
 
-        // Connect player (mono) to mixer, which will output stereo
+        // Connect player (mono) to mixer in mono format
         engine.connect(player, to: mixer, format: monoFormat)
 
         // Apply track volume and pan
         mixer.volume = pow(10, Float(track.fx.volumeDB) / 20.0)
         mixer.pan = Float(track.fx.pan)
 
-        print("✅ Track \(trackIndex + 1): player(mono) → mixer(stereo), vol=\(track.fx.volumeDB)dB, pan=\(track.fx.pan)")
+        print("✅ Track \(trackIndex + 1): player(mono) → mixer(mono), vol=\(track.fx.volumeDB)dB, pan=\(track.fx.pan)")
 
         return (player, mixer)
     }
@@ -491,7 +499,10 @@ class SessionBouncer {
             print("   📍 Scheduled PRE-RENDERED: \(region.sourceURL.lastPathComponent) at \(String(format: "%.2f", region.startTime))s, \(preRenderedBuffer.frameLength) frames")
         }
 
-        print("   ✅ Track ready (\(track.regions.count) pre-rendered regions scheduled)")
+        // CRITICAL: START THE PLAYER NODE!
+        // Without this, offline rendering won't pull any audio from scheduled buffers
+        player.play()
+        print("   ✅ Track ready (\(track.regions.count) pre-rendered regions scheduled) - PLAYER STARTED")
     }
 
     /// Applies gain in dB to a buffer

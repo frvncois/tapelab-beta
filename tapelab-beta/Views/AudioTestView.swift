@@ -14,12 +14,13 @@ struct AudioTestView: View {
     @State private var selectedTrack: Int = 0
     @State private var expandedFXTrack: Int? = nil
     @State private var showSessionView = false
+    @State private var selectedTab: DashboardView.Tab = .sessions
 
     var body: some View {
         NavigationStack {
             contentView
                 .navigationDestination(isPresented: $showSessionView) {
-                    SessionView(runtime: runtime)
+                    SessionView(runtime: runtime, selectedTab: $selectedTab)
                 }
         }
     }

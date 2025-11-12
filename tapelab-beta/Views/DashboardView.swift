@@ -37,7 +37,7 @@ struct DashboardView: View {
             }
         }
         .fullScreenCover(isPresented: $showStudio) {
-            SessionView(runtime: runtime)
+            SessionView(runtime: runtime, selectedTab: $selectedTab)
                 .onAppear {
                     // Dismiss loading screen once SessionView has appeared
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

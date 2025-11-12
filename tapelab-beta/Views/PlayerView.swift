@@ -180,28 +180,6 @@ struct PlayerView: View {
                 }
             }
         }
-        .overlay(alignment: .topTrailing) {
-            Button(action: {
-                dismiss()
-            }) {
-                ZStack {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 60, height: 60)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white, lineWidth: 4)
-                        )
-
-                    Image(systemName: "xmark")
-                        .font(.system(size: 28, weight: .black))
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.top, 60)
-            .padding(.trailing, 20)
-            .shadow(color: .black, radius: 20)
-        }
         .navigationBarHidden(true)
         .onAppear {
             loadCurrentMix()

@@ -171,25 +171,23 @@ struct SessionsListView: View {
     }
 
     private var sessionsList: some View {
-        List {
-            ForEach(filteredSessions) { metadata in
-                Button(action: {
-                    openSession(metadata.id)
-                }) {
-                    SessionMetadataRowView(metadata: metadata)
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 150), spacing: 16)
+            ], spacing: 16) {
+                ForEach(filteredSessions) { metadata in
+                    Button(action: {
+                        openSession(metadata.id)
+                    }) {
+                        SessionGridItemView(metadata: metadata)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
-                .listRowBackground(TapelabTheme.Colors.background)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                .listRowSeparator(.hidden)
             }
-            .onDelete(perform: deleteSessions)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 100) // Space for floating button
         }
-        .listStyle(PlainListStyle())
-        .scrollContentBackground(.hidden)
         .background(TapelabTheme.Colors.background)
-        .environment(\.editMode, .constant(.inactive))
-        .accentColor(Color(red: 1.0, green: 0.231, blue: 0.188)) // iOS system red for delete
     }
 
     private var filteredSessions: [SessionMetadata] {
@@ -260,79 +258,50 @@ struct SessionsListView: View {
         onCreateSession(sessionID)
     }
 
-    private func deleteSessions(at offsets: IndexSet) {
-        for index in offsets {
-            let metadata = sessionMetadata[index]
-
-            do {
-                // Delete from FileStore
-                try FileStore.deleteSession(metadata.id)
-                print("🗑️ Deleted session: \(metadata.name)")
-            } catch {
-                print("⚠️ Failed to delete session: \(error)")
-                // TODO: Show error alert to user
-            }
-        }
-
-        // Remove from local array
-        sessionMetadata.remove(atOffsets: offsets)
-    }
 }
 
-struct SessionMetadataRowView: View {
+struct SessionGridItemView: View {
     let metadata: SessionMetadata
     @State private var coverImage: UIImage? = nil
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Session cover or icon
+        VStack(spacing: 8) {
+            // Square session cover or icon
             ZStack {
                 if let coverImage = coverImage {
                     Image(uiImage: coverImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 50, height: 50)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(height: 150)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.tapelabDark)
-                        .frame(width: 50, height: 50)
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(TapelabTheme.Colors.background)
+                        .frame(height: 150)
                         .overlay(
                             Image(systemName: "waveform")
+                                .font(.system(size: 40))
                                 .foregroundColor(TapelabTheme.Colors.accent)
                         )
                 }
             }
+            .aspectRatio(1.0, contentMode: .fit)
             .onAppear {
                 loadCoverImage()
             }
 
-            // Session info
-            VStack(alignment: .leading, spacing: 4) {
-                Text(metadata.name)
-                    .font(.tapelabMono)
-                    .foregroundColor(TapelabTheme.Colors.text)
-            }
-
-            Spacer()
-
-            // Chevron
-            Image(systemName: "chevron.right")
-                .foregroundColor(TapelabTheme.Colors.textSecondary)
+            // Session title
+            Text(metadata.name)
+                .font(.tapelabMono)
+                .foregroundColor(TapelabTheme.Colors.text)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
         }
-        .padding(12)
-        .background(Color.tapelabButtonBg)
-        .cornerRadius(8)
     }
 
     private func loadCoverImage() {
         coverImage = FileStore.loadSessionCover(metadata.id)
-    }
-
-    private func formatDuration(_ duration: TimeInterval) -> String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 

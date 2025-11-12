@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import Lottie
 
 struct SessionView: View {
     @ObservedObject var runtime: AudioRuntime
+    @Binding var selectedTab: DashboardView.Tab
     @State private var armedTrack: Int = 1 // Track 1 is armed by default
     @State private var showMenu = false
     @State private var showInfoSheet = false
@@ -19,6 +21,8 @@ struct SessionView: View {
     @State private var exportProgress: Int = 0
     @State private var showFileImporter = false
     @State private var importFileItem: ImportFileItem?
+    @State private var isExporting = false
+    @State private var showDeleteConfirmation = false
     @Environment(\.dismiss) var dismiss
 
     // Import file item wrapper for atomic state management
@@ -90,6 +94,14 @@ struct SessionView: View {
                     }) {
                         Label("Export Session", systemImage: "square.and.arrow.up.on.square")
                     }
+
+                    Divider()
+
+                    Button(role: .destructive, action: {
+                        showDeleteConfirmation = true
+                    }) {
+                        Label("Delete Session", systemImage: "trash")
+                    }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 14))
@@ -124,8 +136,31 @@ struct SessionView: View {
         }
         .background(Color.tapelabBackground)
         .navigationBarHidden(true)
-        .disabled(runtime.isProcessing)
+        .disabled(runtime.isProcessing || isExporting)
         .overlay {
+            // Export bouncing overlay
+            if isExporting {
+                ZStack {
+                    Color.black.opacity(0.3)
+                        .background(.ultraThinMaterial)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 20) {
+                        LottieView(animation: .named("loading"))
+                            .playing(loopMode: .loop)
+                            .animationSpeed(-1.0) // Play backwards
+                            .resizable()
+                            .frame(width: 150, height: 150)
+
+                        Text("Bouncing session")
+                            .font(.tapelabMonoSmall)
+                            .foregroundColor(TapelabTheme.Colors.text)
+                    }
+                }
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.2), value: isExporting)
+            }
+
             // Processing overlay
             if runtime.isProcessing {
                 ZStack {
@@ -169,8 +204,20 @@ struct SessionView: View {
             Alert(
                 title: Text("Export Complete"),
                 message: Text(exportAlertMessage),
-                dismissButton: .default(Text("OK"))
+                primaryButton: .default(Text("Go to Mix")) {
+                    selectedTab = .mixes
+                    dismiss()
+                },
+                secondaryButton: .default(Text("OK"))
             )
+        }
+        .alert("Delete Session", isPresented: $showDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteSession()
+            }
+        } message: {
+            Text("Are you sure you want to delete this session? This cannot be undone.")
         }
         .sheet(isPresented: $showFileImporter) {
             AudioFileImporter(
@@ -208,14 +255,12 @@ struct SessionView: View {
     // Export session to stereo mix
     private func exportSession() {
         Task {
-            // Show processing overlay
-            await MainActor.run {
-                runtime.isProcessing = true
-                runtime.processingMessage = "Bouncing mix..."
-                exportProgress = 0
-            }
-
             do {
+                // Show bouncing overlay immediately
+                await MainActor.run {
+                    isExporting = true
+                }
+
                 // Generate output file URL
                 let outputURL = FileStore.newMixURL(sessionName: runtime.session.name)
 
@@ -225,11 +270,9 @@ struct SessionView: View {
                     audioController: runtime.engine
                 )
 
-                // Bounce with progress updates
+                // Bounce (this is usually very fast with offline rendering)
                 let mix = try await bouncer.bounce(to: outputURL) { progress in
-                    Task { @MainActor in
-                        exportProgress = progress.percentage
-                    }
+                    // Progress updates happen silently during the 3-second animation
                 }
 
                 // Save mix metadata
@@ -240,11 +283,12 @@ struct SessionView: View {
                     try? FileStore.saveMixCover(sessionCover, for: mix.id)
                 }
 
-                // Success
+                // Keep showing animation for 3 seconds total
+                try await Task.sleep(nanoseconds: 3_000_000_000)
+
+                // Success - hide animation and show alert
                 await MainActor.run {
-                    runtime.isProcessing = false
-                    runtime.processingMessage = ""
-                    exportProgress = 0
+                    isExporting = false
                     exportAlertMessage = "Mix saved to Mixes folder"
                     showExportAlert = true
                     print("✅ Export complete: \(mix.name)")
@@ -253,9 +297,7 @@ struct SessionView: View {
             } catch let error as SessionBouncer.BounceError {
                 // Handle bounce-specific errors
                 await MainActor.run {
-                    runtime.isProcessing = false
-                    runtime.processingMessage = ""
-                    exportProgress = 0
+                    isExporting = false
                     exportAlertMessage = error.localizedDescription ?? "Export failed"
                     showExportAlert = true
                     print("⚠️ Export failed: \(error)")
@@ -263,9 +305,7 @@ struct SessionView: View {
             } catch {
                 // Handle other errors
                 await MainActor.run {
-                    runtime.isProcessing = false
-                    runtime.processingMessage = ""
-                    exportProgress = 0
+                    isExporting = false
                     exportAlertMessage = "Export failed: \(error.localizedDescription)"
                     showExportAlert = true
                     print("⚠️ Export failed: \(error)")
@@ -311,6 +351,23 @@ struct SessionView: View {
             print("📷 Saved cover image: \(coverURL.lastPathComponent)")
         } catch {
             print("⚠️ Failed to save cover image: \(error)")
+        }
+    }
+
+    // Delete the current session
+    private func deleteSession() {
+        do {
+            try FileStore.deleteSession(runtime.session.id)
+            print("🗑️ Deleted session: \(runtime.session.name)")
+
+            // Post notification to reload sessions list
+            NotificationCenter.default.post(name: NSNotification.Name("ReloadSessions"), object: nil)
+
+            // Dismiss back to dashboard
+            dismiss()
+        } catch {
+            print("⚠️ Failed to delete session: \(error)")
+            // TODO: Show error alert to user
         }
     }
 }

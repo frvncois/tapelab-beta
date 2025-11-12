@@ -168,30 +168,25 @@ struct MixesListView: View {
     }
 
     private var mixesList: some View {
-        ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.flexible(), spacing: 12),
-                GridItem(.flexible(), spacing: 12)
-            ], spacing: 12) {
-                ForEach(filteredMixes) { metadata in
-                    Button(action: {
-                        openMix(metadata.id)
-                    }) {
-                        MixGridItemView(metadata: metadata)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            deleteMix(metadata.id)
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
+        List {
+            ForEach(filteredMixes) { metadata in
+                Button(action: {
+                    openMix(metadata.id)
+                }) {
+                    MixMetadataRowView(metadata: metadata)
                 }
+                .buttonStyle(PlainButtonStyle())
+                .listRowBackground(TapelabTheme.Colors.background)
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowSeparator(.hidden)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 20)
+            .onDelete(perform: deleteMixes)
         }
+        .listStyle(PlainListStyle())
+        .scrollContentBackground(.hidden)
+        .background(TapelabTheme.Colors.background)
+        .environment(\.editMode, .constant(.inactive))
+        .accentColor(Color(red: 1.0, green: 0.231, blue: 0.188)) // iOS system red for delete
     }
 
     private func loadMixes() {
@@ -231,101 +226,75 @@ struct MixesListView: View {
         }
     }
 
-    private func deleteMix(_ mixID: UUID) {
-        guard let index = mixMetadata.firstIndex(where: { $0.id == mixID }) else { return }
+    private func deleteMixes(at offsets: IndexSet) {
+        for index in offsets {
+            let metadata = mixMetadata[index]
 
-        do {
-            try FileStore.deleteMix(mixID)
-            print("🗑️ Deleted mix: \(mixMetadata[index].name)")
-            mixMetadata.remove(at: index)
-        } catch {
-            print("⚠️ Failed to delete mix: \(error)")
+            do {
+                try FileStore.deleteMix(metadata.id)
+                print("🗑️ Deleted mix: \(metadata.name)")
+            } catch {
+                print("⚠️ Failed to delete mix: \(error)")
+            }
         }
+
+        // Remove from local array
+        mixMetadata.remove(atOffsets: offsets)
     }
 }
 
-struct MixGridItemView: View {
+struct MixMetadataRowView: View {
     let metadata: MixMetadata
     @State private var coverImage: UIImage? = nil
 
     var body: some View {
-        VStack(spacing: 8) {
-            // Square audio file visual
-            GeometryReader { geometry in
-                let size = geometry.size.width
-
-                ZStack {
-                    // Background
+        HStack(spacing: 12) {
+            // Mix cover or icon
+            ZStack {
+                if let coverImage = coverImage {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 50, height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.tapelabButtonBg)
-
-                    // Cover image (if available) or waveform visual
-                    if let coverImage = coverImage {
-                        Image(uiImage: coverImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: size, height: size)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        // Waveform-like visual
-                        VStack(spacing: 0) {
-                            Spacer()
-
-                            HStack(alignment: .bottom, spacing: 2) {
-                                ForEach(0..<20, id: \.self) { index in
-                                    RoundedRectangle(cornerRadius: 1)
-                                        .fill(Color.tapelabAccentFull.opacity(0.6))
-                                        .frame(width: 3)
-                                        .frame(height: waveformHeight(for: index))
-                                }
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 12)
-
-                            Spacer()
-                        }
-                    }
-
-                    // Play icon overlay
-                    Circle()
-                        .fill(Color.tapelabOrange.opacity(0.9))
+                        .fill(Color.tapelabDark)
                         .frame(width: 50, height: 50)
                         .overlay(
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .offset(x: 2, y: 0)
+                            Image(systemName: "music.note")
+                                .foregroundColor(TapelabTheme.Colors.accent)
                         )
                 }
-                .frame(width: size, height: size)
             }
-            .aspectRatio(1, contentMode: .fit)
             .onAppear {
-                coverImage = FileStore.loadMixCover(metadata.id)
+                loadCoverImage()
             }
 
-            // Mix info below
+            // Mix info
             VStack(alignment: .leading, spacing: 4) {
                 Text(metadata.name)
-                    .font(.tapelabMonoSmall)
+                    .font(.tapelabMono)
                     .foregroundColor(TapelabTheme.Colors.text)
-                    .lineLimit(1)
 
                 Text(formatDuration(metadata.duration))
                     .font(.tapelabMonoTiny)
                     .foregroundColor(TapelabTheme.Colors.textSecondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer()
+
+            // Chevron
+            Image(systemName: "chevron.right")
+                .foregroundColor(TapelabTheme.Colors.textSecondary)
         }
+        .padding(12)
+        .background(Color.tapelabButtonBg)
+        .cornerRadius(8)
     }
 
-    private func waveformHeight(for index: Int) -> CGFloat {
-        // Create a pseudo-random waveform pattern based on index
-        let baseHeight: CGFloat = 30
-        let variation: CGFloat = 40
-        let normalized = sin(Double(index) * 0.8) * 0.5 + 0.5
-        return baseHeight + (variation * CGFloat(normalized))
+    private func loadCoverImage() {
+        coverImage = FileStore.loadMixCover(metadata.id)
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
