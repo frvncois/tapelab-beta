@@ -17,6 +17,7 @@ struct RegionView: View {
     let regionIndex: Int
     var timeline: TimelineState? = nil
     var isRecordingTrack: Bool = false
+    var recordingRegionID: UUID? = nil  // ID of the region currently being recorded
     var onPositionChanged: ((TimeInterval) -> Void)? = nil
     var onTrackChanged: ((Int) -> Void)? = nil  // New callback for track changes
     var onDeleteRequested: (() -> Void)? = nil  // Callback to request deletion
@@ -36,14 +37,22 @@ struct RegionView: View {
         return selected.trackIndex == trackIndex && selected.regionIndex == regionIndex
     }
 
+    // Check if THIS specific region is the one being recorded
+    private var isThisRegionRecording: Bool {
+        guard let timeline = timeline else { return false }
+        guard isRecordingTrack && timeline.isRecording else { return false }
+        guard let recordingID = recordingRegionID else { return false }
+        return region.id.id == recordingID
+    }
+
     private var xPosition: CGFloat {
         let basePosition = region.startTime * pixelsPerSecond
         return isDragging ? basePosition + dragOffset : basePosition
     }
 
     private var width: CGFloat {
-        // If this is the last region on a recording track, calculate live duration
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // If THIS region is the one being recorded, calculate live duration
+        if isThisRegionRecording, let timeline = timeline {
             // Live duration = current playhead - region start time
             let liveDuration = max(0, timeline.playhead - region.startTime)
             return liveDuration * pixelsPerSecond
@@ -53,8 +62,8 @@ struct RegionView: View {
     }
 
     private var displayDuration: Double {
-        // If this is the last region on a recording track, show live duration
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // If THIS region is the one being recorded, show live duration
+        if isThisRegionRecording, let timeline = timeline {
             return max(0, timeline.playhead - region.startTime)
         } else {
             return region.duration
@@ -62,33 +71,36 @@ struct RegionView: View {
     }
 
     private var regionBackgroundColor: Color {
-        // Orange if selected, red if currently recording, accent for normal regions
+        // Orange if selected, red if recording, dark tape-inspired color for normal regions
         if isRegionSelected {
             return Color.tapelabOrange.opacity(0.25)
-        } else if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        } else if isThisRegionRecording {
             return Color.tapelabRed.opacity(0.1)
         } else {
-            return Color.tapelabAccent
+            // Tape-inspired dark background (subtle dark brown)
+            return Color.tapelabButtonBg.opacity(0.4)
         }
     }
 
     private var regionBorderColor: Color {
-        // Orange if selected, red if currently recording, accent for normal regions
+        // Orange if selected, red if recording, light border for normal regions (tape aesthetic)
         if isRegionSelected {
             return Color.tapelabOrange
-        } else if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        } else if isThisRegionRecording {
             return Color.tapelabRed
         } else {
-            return Color.tapelabAccentFull
+            // Tape-inspired light border (cream/beige)
+            return Color.tapelabLight.opacity(0.5)
         }
     }
 
     private var waveformColor: Color {
-        // Waveform color matches border color for consistency
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // Waveform color: red for recording, light for normal (tape aesthetic)
+        if isThisRegionRecording {
             return Color.tapelabRed.opacity(0.7)
         } else {
-            return Color.tapelabAccentFull.opacity(0.6)
+            // Tape-inspired waveform (cream/beige to match border)
+            return Color.tapelabLight.opacity(0.7)
         }
     }
 
@@ -323,8 +335,8 @@ struct RegionView: View {
     // MARK: - Waveform Loading
 
     private func loadWaveformData() {
-        // Don't load waveform while actively recording
-        if let timeline = timeline, isRecordingTrack && timeline.isRecording {
+        // Don't load waveform while THIS region is actively recording
+        if isThisRegionRecording {
             waveformSamples = []
             return
         }

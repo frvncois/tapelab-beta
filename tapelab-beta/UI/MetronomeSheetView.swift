@@ -35,7 +35,7 @@ struct MetronomeSheetView: View {
                 ZStack {
                     // Animated pulse circle
                     Circle()
-                        .stroke(Color.tapelabAccentFull, lineWidth: 2)
+                        .stroke(Color.tapelabRed, lineWidth: 2)
                         .frame(width: 160, height: 160)
                         .scaleEffect(pulseScale)
                         .animation(.easeInOut(duration: 60.0 / localBPM), value: pulseScale)
@@ -49,7 +49,7 @@ struct MetronomeSheetView: View {
                     VStack(spacing: 4) {
                         Text("\(Int(localBPM))")
                             .font(.system(size: 52, weight: .bold, design: .monospaced))
-                            .foregroundColor(.tapelabAccentFull)
+                            .foregroundColor(.tapelabRed)
 
                         Text("BPM")
                             .font(.tapelabMonoSmall)
@@ -61,7 +61,7 @@ struct MetronomeSheetView: View {
                 // BPM Slider
                 VStack(spacing: 8) {
                     Slider(value: $localBPM, in: 40...240, step: 1)
-                        .accentColor(.tapelabAccentFull)
+                        .accentColor(.tapelabRed)
                         .padding(.horizontal, 32)
                         .onChange(of: localBPM) { newValue in
                             // Update metronome BPM in real-time
@@ -89,13 +89,13 @@ struct MetronomeSheetView: View {
                     HStack {
                         Text("40")
                             .font(.tapelabMonoSmall)
-                            .foregroundColor(.tapelabAccentFull)
+                            .foregroundColor(.tapelabRed)
 
                         Spacer()
 
                         Text("240")
                             .font(.tapelabMonoSmall)
-                            .foregroundColor(.tapelabAccentFull)
+                            .foregroundColor(.tapelabRed)
                     }
                     .padding(.horizontal, 32)
                 }
@@ -118,14 +118,14 @@ struct MetronomeSheetView: View {
                                 Text(sig.displayName)
                                     .font(.tapelabMonoSmall)
                                     .lineLimit(1)
-                                    .foregroundColor(localTimeSignature == sig ? .tapelabAccentFull : .tapelabLight)
+                                    .foregroundColor(localTimeSignature == sig ? .tapelabOrange : .tapelabLight)
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
                                     .background(localTimeSignature == sig ? Color.tapelabButtonBg.opacity(0.8) : Color.tapelabButtonBg)
                                     .cornerRadius(16)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 16)
-                                            .stroke(localTimeSignature == sig ? Color.tapelabAccentFull : Color.clear, lineWidth: 1)
+                                            .stroke(localTimeSignature == sig ? Color.tapelabOrange : Color.clear, lineWidth: 1)
                                     )
                             }
                             .buttonStyle(.plain)
@@ -139,7 +139,7 @@ struct MetronomeSheetView: View {
                     HStack {
                         Toggle(isOn: $applyToSession) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("APPLY BPM TO SESSION")
+                                Text("APPLY TO GRID")
                                     .font(.tapelabMonoSmall)
                                     .foregroundColor(.tapelabLight)
                             }
@@ -171,7 +171,7 @@ struct MetronomeSheetView: View {
                     HStack {
                         Toggle(isOn: $countInEnabled) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("COUNT-IN BEFORE RECORDING")
+                                Text("COUNT-IN")
                                     .font(.tapelabMonoSmall)
                                     .foregroundColor(.tapelabLight)
                             }
@@ -190,7 +190,7 @@ struct MetronomeSheetView: View {
                     HStack {
                         Toggle(isOn: $playWhileRecording) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("PLAY WHILE RECORDING")
+                                Text("PLAYBACK")
                                     .font(.tapelabMonoSmall)
                                     .foregroundColor(.tapelabLight)
                             }
@@ -219,7 +219,7 @@ struct MetronomeSheetView: View {
                         dismiss()
                     }) {
                         Image(systemName: "xmark")
-                            .foregroundColor(.tapelabAccentFull)
+                            .foregroundColor(.tapelabLight)
                     }
                 }
             }

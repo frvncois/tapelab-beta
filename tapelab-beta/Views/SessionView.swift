@@ -17,7 +17,15 @@ struct SessionView: View {
     @State private var showExportAlert = false
     @State private var exportAlertMessage = ""
     @State private var exportProgress: Int = 0
+    @State private var showFileImporter = false
+    @State private var importFileItem: ImportFileItem?
     @Environment(\.dismiss) var dismiss
+
+    // Import file item wrapper for atomic state management
+    struct ImportFileItem: Identifiable {
+        let id = UUID()
+        let url: URL
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,9 +74,9 @@ struct SessionView: View {
                     // Menu button
                     Menu {
                     Button(action: {
-                        // TODO: Import track functionality
+                        showFileImporter = true
                     }) {
-                        Label("Import Track", systemImage: "square.and.arrow.down")
+                        Label("Import Audio", systemImage: "square.and.arrow.down")
                     }
 
                     Button(action: {
@@ -163,6 +171,37 @@ struct SessionView: View {
                 message: Text(exportAlertMessage),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .sheet(isPresented: $showFileImporter) {
+            AudioFileImporter(
+                onFileSelected: { url in
+                    print("📱 SessionView: File selected: \(url.lastPathComponent)")
+                    showFileImporter = false
+
+                    // Small delay to ensure file importer dismisses cleanly
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        print("📱 SessionView: Creating ImportFileItem")
+                        importFileItem = ImportFileItem(url: url)
+                    }
+                },
+                onCancel: {
+                    print("📱 SessionView: File importer cancelled")
+                    showFileImporter = false
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .sheet(item: $importFileItem) { item in
+            let _ = print("📱 SessionView: Presenting ImportAudioSheet with file: \(item.url.lastPathComponent)")
+
+            ImportAudioSheet(
+                session: $runtime.session,
+                playheadPosition: runtime.timeline.playhead,
+                runtime: runtime,
+                sourceFileURL: item.url
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
 

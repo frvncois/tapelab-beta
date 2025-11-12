@@ -41,72 +41,79 @@ struct TimelineView: View {
                     // Single scrollable area containing ruler and tracks
                     ScrollViewReader { scrollProxy in
                         ScrollView(.horizontal, showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            // Time ruler (scrolls with content)
-                            TimelineRulerView(
-                                timeline: timeline,
-                                pixelsPerSecond: pixelsPerSecond,
-                                maxDuration: maxDuration,
-                                bpm: runtime.session.bpm,
-                                timelineMode: runtime.session.timelineMode
-                            )
-                            .frame(width: totalWidth, height: rulerHeight)
-                            .background(Color.tapelabBlack)
-
-                            // Timeline content
-                            ZStack(alignment: .topLeading) {
-                                // Background grid (beat-based or seconds-based)
-                                if runtime.session.timelineMode == .bpm, let bpm = runtime.session.bpm {
-                                    // BPM mode - grid shows beats
-                                    let totalBeats = Int(ceil((maxDuration / 60.0) * bpm))
-                                    ForEach(0...totalBeats, id: \.self) { beat in
-                                        let beatTime = (Double(beat) / bpm) * 60.0
-                                        Rectangle()
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 1, height: availableHeight)
-                                            .offset(x: CGFloat(beatTime) * pixelsPerSecond, y: 0)
-                                    }
-                                } else {
-                                    // Seconds mode - grid shows seconds
-                                    let totalSeconds = Int(ceil(maxDuration))
-                                    ForEach(0...totalSeconds, id: \.self) { second in
-                                        Rectangle()
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 1, height: availableHeight)
-                                            .offset(x: CGFloat(second) * pixelsPerSecond, y: 0)
-                                    }
-                                }
-
-                                // Track lanes content (no headers in scrollable area)
-                                VStack(spacing: 0) {
-                                    ForEach(tracks.indices, id: \.self) { index in
-                                        trackContentView(for: index, height: trackHeight)
-                                    }
-                                }
-
-                                // Playhead overlay (on top of everything)
-                                PlayheadView(
+                            VStack(spacing: 0) {
+                                // Time ruler (scrolls with content)
+                                TimelineRulerView(
                                     timeline: timeline,
                                     pixelsPerSecond: pixelsPerSecond,
-                                    totalHeight: availableHeight
+                                    maxDuration: maxDuration,
+                                    bpm: runtime.session.bpm,
+                                    timelineMode: runtime.session.timelineMode
                                 )
+                                .frame(width: totalWidth, height: rulerHeight)
+                                .background(Color.tapelabBlack)
 
-                                // Invisible anchor for auto-scrolling
-                                Color.clear
-                                    .frame(width: 1, height: 1)
-                                    .offset(x: timeline.playhead * pixelsPerSecond, y: 0)
-                                    .id("playhead")
+                                // Timeline content
+                                ZStack(alignment: .topLeading) {
+                                    // Invisible scroll anchor system (bottom layer)
+                                    HStack(spacing: 0) {
+                                        Color.clear
+                                            .frame(width: max(0, timeline.playhead * pixelsPerSecond), height: 1)
+
+                                        Color.clear
+                                            .frame(width: 1, height: 1)
+                                            .id("playhead")
+
+                                        Color.clear
+                                            .frame(width: max(0, totalWidth - timeline.playhead * pixelsPerSecond), height: 1)
+                                    }
+                                    .frame(height: 1)
+
+                                    // Background grid (beat-based or seconds-based)
+                                    if runtime.session.timelineMode == .bpm, let bpm = runtime.session.bpm {
+                                        // BPM mode - grid shows beats
+                                        let totalBeats = Int(ceil((maxDuration / 60.0) * bpm))
+                                        ForEach(0...totalBeats, id: \.self) { beat in
+                                            let beatTime = (Double(beat) / bpm) * 60.0
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.2))
+                                                .frame(width: 1, height: availableHeight)
+                                                .offset(x: CGFloat(beatTime) * pixelsPerSecond, y: 0)
+                                        }
+                                    } else {
+                                        // Seconds mode - grid shows seconds
+                                        let totalSeconds = Int(ceil(maxDuration))
+                                        ForEach(0...totalSeconds, id: \.self) { second in
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.2))
+                                                .frame(width: 1, height: availableHeight)
+                                                .offset(x: CGFloat(second) * pixelsPerSecond, y: 0)
+                                        }
+                                    }
+
+                                    // Track lanes content (no headers in scrollable area)
+                                    VStack(spacing: 0) {
+                                        ForEach(tracks.indices, id: \.self) { index in
+                                            trackContentView(for: index, height: trackHeight)
+                                        }
+                                    }
+                                    .frame(width: totalWidth, alignment: .leading)
+
+                                    // Playhead overlay (on top of everything)
+                                    PlayheadView(
+                                        timeline: timeline,
+                                        pixelsPerSecond: pixelsPerSecond,
+                                        totalHeight: availableHeight
+                                    )
+                                }
+                                .frame(width: totalWidth, height: availableHeight)
                             }
-                            .frame(width: totalWidth, height: availableHeight)
-                        }
-                        .contentShape(Rectangle())
+                            .contentShape(Rectangle())
                         }
                         .onChange(of: timeline.playhead) { oldValue, newValue in
-                            // Auto-scroll during playback/recording
-                            if timeline.isPlaying || timeline.isRecording {
-                                withAnimation(.linear(duration: 0.1)) {
-                                    scrollProxy.scrollTo("playhead", anchor: .center)
-                                }
+                            // Always auto-scroll to keep playhead centered
+                            withAnimation(.linear(duration: 0.05)) {
+                                scrollProxy.scrollTo("playhead", anchor: .center)
                             }
                         }
                     }
@@ -193,6 +200,7 @@ struct TimelineView: View {
                     regionIndex: regionIndex,
                     timeline: timeline,
                     isRecordingTrack: armedTrack == index + 1 && timeline.isRecording,
+                    recordingRegionID: runtime.recorder.activeRecording?.regionID.id,
                     onPositionChanged: { newStartTime in
                         // Update region position - find current index by ID
                         if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
