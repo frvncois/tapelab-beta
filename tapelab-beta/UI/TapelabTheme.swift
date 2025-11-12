@@ -118,13 +118,13 @@ struct TapelabButtonStyle: ButtonStyle {
         if isArmButton {
             return isActive ? Color.tapelabRed : Color.tapelabArmButtonBg
         } else {
-            return Color.tapelabButtonBg
+            return isActive ? Color.tapelabOrange.opacity(0.1) : Color.tapelabButtonBg
         }
     }
 
     private var borderColor: Color {
-        if isArmButton && isActive {
-            return Color.tapelabRed
+        if isActive {
+            return isArmButton ? Color.tapelabRed : Color.tapelabOrange
         } else {
             return Color.tapelabButtonBorder
         }

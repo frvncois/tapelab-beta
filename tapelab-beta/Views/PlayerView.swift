@@ -5,133 +5,209 @@ import Combine
 /// Simple audio player for playing back bounced mixes
 struct PlayerView: View {
     let mix: Mix
+    let allMixes: [MixMetadata]
+
     @StateObject private var player = MixPlayer()
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var runtime: AudioRuntime
+    @State private var coverImage: UIImage? = nil
+    @State private var currentMix: Mix
+    @State private var dragOffset: CGFloat = 0
+
+    init(mix: Mix, allMixes: [MixMetadata] = []) {
+        self.mix = mix
+        self.allMixes = allMixes
+        _currentMix = State(initialValue: mix)
+    }
 
     var body: some View {
         ZStack {
-            // Background - use explicit color to debug
-            Color(hex: "1D1613")
-                .ignoresSafeArea()
+            // Blurred background image
+            if let coverImage = coverImage {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .ignoresSafeArea()
+                    .blur(radius: 50)
+                    .overlay(
+                        // Gradient overlay for darker bottom
+                        LinearGradient(
+                            gradient: Gradient(stops: [
+                                .init(color: Color.black.opacity(0.3), location: 0.0),
+                                .init(color: Color.black.opacity(0.5), location: 0.5),
+                                .init(color: Color.black.opacity(0.9), location: 1.0)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                    )
+                    .allowsHitTesting(false)
+            } else {
+                // Fallback solid background if no cover
+                Color.tapelabBlack
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
 
             VStack(spacing: 0) {
                 // Header
                 header
-                    .background(Color(hex: "17120F"))
-
-                Divider()
-                    .background(Color.gray)
 
                 // Player content
-                VStack(spacing: 40) {
-                Spacer()
+                VStack(spacing: 32) {
+                    Spacer()
 
-                // Waveform placeholder / artwork
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(TapelabTheme.Colors.surface)
-                        .frame(height: 200)
-
-                    Image(systemName: "waveform")
-                        .font(.system(size: 80))
-                        .foregroundColor(TapelabTheme.Colors.accent.opacity(0.3))
-                }
-                .padding(.horizontal, 40)
-
-                // Time display
-                VStack(spacing: 8) {
-                    // Progress bar
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            // Background
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(TapelabTheme.Colors.surface)
-                                .frame(height: 4)
-
-                            // Progress
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(TapelabTheme.Colors.accent)
-                                .frame(width: geometry.size.width * CGFloat(player.progress), height: 4)
-                        }
-                    }
-                    .frame(height: 4)
-                    .padding(.horizontal, 40)
-
-                    // Time labels
-                    HStack {
-                        Text(formatTime(player.currentTime))
-                            .font(.tapelabMonoSmall)
-                            .foregroundColor(TapelabTheme.Colors.text)
-
-                        Spacer()
-
-                        Text(formatTime(mix.duration))
-                            .font(.tapelabMonoSmall)
-                            .foregroundColor(TapelabTheme.Colors.textSecondary)
-                    }
-                    .padding(.horizontal, 40)
-                }
-
-                // Transport controls
-                HStack(spacing: 40) {
-                    // Rewind button
-                    Button(action: {
-                        player.seek(to: 0)
-                    }) {
-                        Image(systemName: "backward.end.fill")
-                            .font(.system(size: 28))
-                            .foregroundColor(TapelabTheme.Colors.text)
-                    }
-
-                    // Play/Pause button
-                    Button(action: {
-                        if player.isPlaying {
-                            player.pause()
+                    // Square cover image centered with swipe gesture
+                    ZStack {
+                        if let coverImage = coverImage {
+                            Image(uiImage: coverImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 280, height: 280)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
                         } else {
-                            player.play()
-                        }
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(TapelabTheme.Colors.accent)
-                                .frame(width: 70, height: 70)
-
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 30))
-                                .foregroundColor(.tapelabLight)
-                                .offset(x: player.isPlaying ? 0 : 2) // Optical centering for play icon
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(TapelabTheme.Colors.surface)
+                                .frame(width: 280, height: 280)
+                                .overlay(
+                                    Image(systemName: "waveform")
+                                        .font(.system(size: 80))
+                                        .foregroundColor(TapelabTheme.Colors.accent.opacity(0.3))
+                                )
+                                .shadow(color: .black.opacity(0.5), radius: 20, x: 0, y: 10)
                         }
                     }
+                    .offset(x: dragOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                dragOffset = value.translation.width
+                            }
+                            .onEnded { value in
+                                let threshold: CGFloat = 100
+                                if value.translation.width > threshold {
+                                    // Swipe right - previous mix
+                                    navigateToPreviousMix()
+                                } else if value.translation.width < -threshold {
+                                    // Swipe left - next mix
+                                    navigateToNextMix()
+                                }
+                                withAnimation(.spring()) {
+                                    dragOffset = 0
+                                }
+                            }
+                    )
 
-                    // Share button
-                    Button(action: {
-                        shareAudioFile()
-                    }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 28))
-                            .foregroundColor(TapelabTheme.Colors.text)
+                    Spacer()
+
+                    // Controls section (on dark background)
+                    VStack(spacing: 24) {
+                        // Time display
+                        VStack(spacing: 12) {
+                            // Progress bar
+                            GeometryReader { geometry in
+                                ZStack(alignment: .leading) {
+                                    // Background
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color.white.opacity(0.2))
+                                        .frame(height: 4)
+
+                                    // Progress
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(Color.white)
+                                        .frame(width: geometry.size.width * CGFloat(player.progress), height: 4)
+                                }
+                            }
+                            .frame(height: 4)
+                            .padding(.horizontal, 40)
+
+                            // Time labels
+                            HStack {
+                                Text(formatTime(player.currentTime))
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.white)
+
+                                Spacer()
+
+                                Text(formatTime(currentMix.duration))
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 40)
+                        }
+
+                        // Transport controls
+                        HStack(spacing: 40) {
+                            // Rewind button - matching TransportView style
+                            Button(action: {
+                                player.seek(to: 0)
+                            }) {
+                                Image(systemName: "backward.end.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.tapelabAccentFull)
+                            }
+                            .buttonStyle(.plain)
+
+                            // Play/Pause button - matching TransportView style
+                            Button(action: {
+                                if player.isPlaying {
+                                    player.pause()
+                                } else {
+                                    player.play()
+                                }
+                            }) {
+                                Image(systemName: player.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 64))
+                                    .foregroundColor(player.isPlaying ? .tapelabRed : .tapelabGreen)
+                            }
+                            .buttonStyle(.plain)
+
+                            // Share button - matching TransportView style
+                            Button(action: {
+                                shareAudioFile()
+                            }) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.title2)
+                                    .foregroundColor(.tapelabAccentFull)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.bottom, 40)
                     }
                 }
-
-                Spacer()
             }
-            .padding(.vertical, 40)
         }
+        .overlay(alignment: .topTrailing) {
+            Button(action: {
+                dismiss()
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 60, height: 60)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white, lineWidth: 4)
+                        )
+
+                    Image(systemName: "xmark")
+                        .font(.system(size: 28, weight: .black))
+                        .foregroundColor(.white)
+                }
+            }
+            .padding(.top, 60)
+            .padding(.trailing, 20)
+            .shadow(color: .black, radius: 20)
         }
         .navigationBarHidden(true)
         .onAppear {
-            print("🎵 PlayerView appeared for mix: \(mix.name)")
-            print("🎵 Mix file URL: \(mix.fileURL)")
-            print("🎵 Mix duration: \(mix.duration)s")
+            loadCurrentMix()
 
             // CRITICAL: Stop main engine first to free audio session
             runtime.suspendForExternalPlayback()
-
-            // Small delay to ensure engine is stopped
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                player.load(url: mix.fileURL)
-            }
         }
         .onDisappear {
             print("🎵 PlayerView disappeared")
@@ -140,45 +216,72 @@ struct PlayerView: View {
             // CRITICAL: Resume main engine
             runtime.resumeAfterExternalPlayback()
         }
+        .onChange(of: currentMix.id) { _, _ in
+            loadCurrentMix()
+        }
     }
 
     private var header: some View {
-        ZStack {
-            // Back button on left
-            HStack {
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 14))
-                        Text("BACK")
-                            .font(.tapelabMonoTiny)
-                    }
-                    .foregroundColor(.tapelabLight)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.tapelabButtonBg)
-                    .cornerRadius(16)
-                }
+        // Title centered
+        VStack(spacing: 4) {
+            Text(currentMix.name)
+                .font(.tapelabMonoHeadline)
+                .lineLimit(1)
+                .foregroundColor(.white)
 
-                Spacer()
-            }
+            Text(currentMix.sessionName)
+                .font(.tapelabMonoSmall)
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
 
-            // Title centered
-            VStack(spacing: 4) {
-                Text(mix.name)
-                    .font(.tapelabMonoHeadline)
-                    .lineLimit(1)
-                    .foregroundColor(.tapelabLight)
+    private func loadCurrentMix() {
+        // Load cover image
+        coverImage = FileStore.loadMixCover(currentMix.id)
 
-                Text(mix.sessionName)
-                    .font(.tapelabMonoSmall)
-                    .foregroundColor(.tapelabLight.opacity(0.6))
+        print("🎵 PlayerView loading mix: \(currentMix.name)")
+        print("🎵 Mix file URL: \(currentMix.fileURL)")
+        print("🎵 Mix duration: \(currentMix.duration)s")
+
+        // Stop current playback
+        player.stop()
+
+        // Small delay to ensure player is stopped
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            player.load(url: currentMix.fileURL)
+        }
+    }
+
+    private func navigateToNextMix() {
+        guard !allMixes.isEmpty else { return }
+
+        if let currentIndex = allMixes.firstIndex(where: { $0.id == currentMix.id }) {
+            let nextIndex = (currentIndex + 1) % allMixes.count
+            let nextMixMetadata = allMixes[nextIndex]
+
+            // Load full mix from metadata
+            if let fullMix = try? FileStore.loadMix(nextMixMetadata.id) {
+                currentMix = fullMix
+                print("📱 Swiped to next mix: \(fullMix.name)")
             }
         }
-        .padding()
-        .background(Color.tapelabBlack)
+    }
+
+    private func navigateToPreviousMix() {
+        guard !allMixes.isEmpty else { return }
+
+        if let currentIndex = allMixes.firstIndex(where: { $0.id == currentMix.id }) {
+            let previousIndex = (currentIndex - 1 + allMixes.count) % allMixes.count
+            let previousMixMetadata = allMixes[previousIndex]
+
+            // Load full mix from metadata
+            if let fullMix = try? FileStore.loadMix(previousMixMetadata.id) {
+                currentMix = fullMix
+                print("📱 Swiped to previous mix: \(fullMix.name)")
+            }
+        }
     }
 
     private func formatTime(_ time: TimeInterval) -> String {
@@ -188,14 +291,35 @@ struct PlayerView: View {
     }
 
     private func shareAudioFile() {
+        // Create activity view controller with the audio file
         let activityVC = UIActivityViewController(
-            activityItems: [mix.fileURL],
+            activityItems: [currentMix.fileURL],
             applicationActivities: nil
         )
 
+        // Configure for iPad (required for popover presentation)
+        if let popoverController = activityVC.popoverPresentationController {
+            // Find the share button view to anchor the popover
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first {
+                popoverController.sourceView = window
+                popoverController.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                popoverController.permittedArrowDirections = []
+            }
+        }
+
+        // Present the share sheet
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootVC = windowScene.windows.first?.rootViewController {
-            rootVC.present(activityVC, animated: true)
+            // Find the topmost view controller
+            var topController = rootVC
+            while let presentedVC = topController.presentedViewController {
+                topController = presentedVC
+            }
+            topController.present(activityVC, animated: true)
+
+            print("📤 Presenting share sheet for: \(currentMix.name)")
+            print("📤 File URL: \(currentMix.fileURL.path)")
         }
     }
 }

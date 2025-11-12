@@ -16,146 +16,200 @@ struct VOLSheetView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Volume & Pan
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("MIX")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.secondary)
+            ZStack {
+                TapelabTheme.Colors.background
+                    .ignoresSafeArea()
 
-                        HStack {
-                            Text("Volume")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.1f dB", track.fx.volumeDB))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { track.fx.volumeDB },
-                            set: { newValue in
-                                track.fx.volumeDB = newValue
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: -40...12, step: 0.5)
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Volume & Pan Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Section header with dot
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.tapelabLight)
+                                    .frame(width: 3, height: 3)
 
-                        HStack {
-                            Text("Pan")
-                                .font(.caption)
-                            Spacer()
-                            Text(track.fx.pan < 0 ? String(format: "L%.0f", abs(track.fx.pan) * 100) :
-                                 track.fx.pan > 0 ? String(format: "R%.0f", track.fx.pan * 100) :
-                                 "C")
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.pan) },
-                            set: { newValue in
-                                track.fx.pan = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
+                                Text("MIX")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
                             }
-                        ), in: -1...1, step: 0.1)
+
+                            VStack(spacing: 16) {
+                                // Volume control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("VOLUME")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.1f dB", track.fx.volumeDB))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { track.fx.volumeDB },
+                                        set: { newValue in
+                                            track.fx.volumeDB = newValue
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: -40...12, step: 0.5)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+
+                                // Pan control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("PAN")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(track.fx.pan < 0 ? String(format: "L%.0f", abs(track.fx.pan) * 100) :
+                                             track.fx.pan > 0 ? String(format: "R%.0f", track.fx.pan * 100) :
+                                             "C")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.pan) },
+                                        set: { newValue in
+                                            track.fx.pan = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: -1...1, step: 0.1)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+                            }
+                        }
+
+                        // EQ Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Section header with dot
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.tapelabLight)
+                                    .frame(width: 3, height: 3)
+
+                                Text("EQUALIZER")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                            }
+
+                            VStack(spacing: 0) {
+                                ForEach(track.fx.eqBands.indices, id: \.self) { index in
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        // Band label
+                                        Text(eqBandLabel(for: index))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+
+                                        // Frequency control
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                Text("FREQUENCY")
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                Spacer()
+                                                Text(formatFrequency(track.fx.eqBands[index].frequency))
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                    .monospacedDigit()
+                                            }
+                                            Slider(value: Binding(
+                                                get: { track.fx.eqBands[index].frequency },
+                                                set: { newValue in
+                                                    track.fx.eqBands[index].frequency = newValue
+                                                    applyFXUpdate()
+                                                    triggerSliderHaptic()
+                                                }
+                                            ), in: frequencyRange(for: index), step: frequencyStep(for: index))
+                                            .accentColor(.tapelabAccentFull)
+                                        }
+
+                                        // Gain control
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                Text("GAIN")
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                Spacer()
+                                                Text(formatGain(track.fx.eqBands[index].gainDB))
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                    .monospacedDigit()
+                                            }
+                                            Slider(value: Binding(
+                                                get: { track.fx.eqBands[index].gainDB },
+                                                set: { newValue in
+                                                    track.fx.eqBands[index].gainDB = newValue
+                                                    applyFXUpdate()
+                                                    triggerSliderHaptic()
+                                                }
+                                            ), in: -12...12, step: 0.5)
+                                            .accentColor(.tapelabAccentFull)
+                                        }
+
+                                        // Q control
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            HStack {
+                                                Text("Q FACTOR")
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                Spacer()
+                                                Text(formatQ(track.fx.eqBands[index].q))
+                                                    .font(.tapelabMonoTiny)
+                                                    .foregroundColor(.tapelabAccentFull)
+                                                    .monospacedDigit()
+                                            }
+                                            Slider(value: Binding(
+                                                get: { track.fx.eqBands[index].q },
+                                                set: { newValue in
+                                                    track.fx.eqBands[index].q = newValue
+                                                    applyFXUpdate()
+                                                    triggerSliderHaptic()
+                                                }
+                                            ), in: 0.5...3.0, step: 0.1)
+                                            .accentColor(.tapelabAccentFull)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .background(TapelabTheme.Colors.surface)
+
+                                    // Add separator between bands
+                                    if index < track.fx.eqBands.count - 1 {
+                                        Divider()
+                                            .background(Color.tapelabDark)
+                                    }
+                                }
+                            }
+                            .cornerRadius(8)
+                        }
+
+                        Spacer(minLength: 20)
                     }
-
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    // EQ Section
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("EQUALIZER")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.secondary)
-
-                        ForEach(track.fx.eqBands.indices, id: \.self) { index in
-                            VStack(alignment: .leading, spacing: 6) {
-                                // Band label
-                                Text(eqBandLabel(for: index))
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-
-                                // Frequency control
-                                HStack {
-                                    Text("Frequency")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(formatFrequency(track.fx.eqBands[index].frequency))
-                                        .font(.caption2)
-                                        .monospacedDigit()
-                                        .foregroundColor(.secondary)
-                                }
-                                Slider(value: Binding(
-                                    get: { track.fx.eqBands[index].frequency },
-                                    set: { newValue in
-                                        track.fx.eqBands[index].frequency = newValue
-                                        applyFXUpdate()
-                                        triggerSliderHaptic()
-                                    }
-                                ), in: frequencyRange(for: index), step: frequencyStep(for: index))
-
-                                // Gain control
-                                HStack {
-                                    Text("Gain")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(formatGain(track.fx.eqBands[index].gainDB))
-                                        .font(.caption2)
-                                        .monospacedDigit()
-                                        .foregroundColor(.secondary)
-                                }
-                                Slider(value: Binding(
-                                    get: { track.fx.eqBands[index].gainDB },
-                                    set: { newValue in
-                                        track.fx.eqBands[index].gainDB = newValue
-                                        applyFXUpdate()
-                                        triggerSliderHaptic()
-                                    }
-                                ), in: -12...12, step: 0.5)
-
-                                // Q control
-                                HStack {
-                                    Text("Q Factor")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(formatQ(track.fx.eqBands[index].q))
-                                        .font(.caption2)
-                                        .monospacedDigit()
-                                        .foregroundColor(.secondary)
-                                }
-                                Slider(value: Binding(
-                                    get: { track.fx.eqBands[index].q },
-                                    set: { newValue in
-                                        track.fx.eqBands[index].q = newValue
-                                        applyFXUpdate()
-                                        triggerSliderHaptic()
-                                    }
-                                ), in: 0.5...3.0, step: 0.1)
-
-                                // Divider between bands (except last)
-                                if index < track.fx.eqBands.count - 1 {
-                                    Divider()
-                                        .padding(.vertical, 4)
-                                }
-                            }
-                        }
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
                 }
-                .padding()
             }
             .navigationTitle("Track \(track.number) Volume & EQ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    Button(action: {
                         dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.tapelabAccentFull)
                     }
                 }
             }
@@ -182,11 +236,11 @@ struct VOLSheetView: View {
 
     private func eqBandLabel(for index: Int) -> String {
         switch index {
-        case 0: return "Low (100 Hz)"
-        case 1: return "Low-Mid (500 Hz)"
-        case 2: return "High-Mid (2 kHz)"
-        case 3: return "High (8 kHz)"
-        default: return "Band \(index + 1)"
+        case 0: return "LOW (100 HZ)"
+        case 1: return "LOW-MID (500 HZ)"
+        case 2: return "HIGH-MID (2 KHZ)"
+        case 3: return "HIGH (8 KHZ)"
+        default: return "BAND \(index + 1)"
         }
     }
 

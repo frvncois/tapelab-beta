@@ -144,24 +144,10 @@ public final class AudioRuntime: ObservableObject {
     
     func startPlayback() async {
         do {
-            // Show processing indicator
-            isProcessing = true
-            processingMessage = "Processing track..."
-            objectWillChange.send()
-
             try await player.play(session: session, timeline: timeline)
-
-            // Hide processing indicator
-            isProcessing = false
-            processingMessage = ""
-            // Force SwiftUI to update
-            objectWillChange.send()
         }
         catch {
             print("⚠️ Playback failed: \(error)")
-            isProcessing = false
-            processingMessage = ""
-            objectWillChange.send()
         }
     }
     
@@ -202,35 +188,38 @@ public final class AudioRuntime: ObservableObject {
             print("🔍 Timeline isRecording AFTER: \(timeline.isRecording)")
 
             // NOW play the count-in metronome (it gets recorded)
-            if session.metronomeCountIn {
-                let beatsPerMeasure = session.timeSignature.beatsPerMeasure
-                print("🥁 Starting \(beatsPerMeasure)-count metronome (recording already started)...")
-                metronome.bpm = session.bpm
-                metronome.timeSignature = session.timeSignature
+            // Only play metronome if BPM is set
+            if let bpm = session.bpm {
+                if session.metronomeCountIn {
+                    let beatsPerMeasure = session.timeSignature.beatsPerMeasure
+                    print("🥁 Starting \(beatsPerMeasure)-count metronome (recording already started)...")
+                    metronome.bpm = bpm
+                    metronome.timeSignature = session.timeSignature
 
-                // Start metronome for count-in
-                await metronome.play()
+                    // Start metronome for count-in
+                    await metronome.play()
 
-                // Calculate count-in duration (full measure based on time signature)
-                let beatDuration = 60.0 / session.bpm
-                let countInDuration = beatDuration * Double(beatsPerMeasure)
+                    // Calculate count-in duration (full measure based on time signature)
+                    let beatDuration = 60.0 / bpm
+                    let countInDuration = beatDuration * Double(beatsPerMeasure)
 
-                // Wait for one full measure
-                try await Task.sleep(nanoseconds: UInt64(countInDuration * 1_000_000_000))
+                    // Wait for one full measure
+                    try await Task.sleep(nanoseconds: UInt64(countInDuration * 1_000_000_000))
 
-                // Stop metronome after count-in if not playing during recording
-                if !session.metronomeWhileRecording {
-                    metronome.stop()
-                    print("🥁 Count-in complete, metronome stopped")
-                } else {
-                    print("🥁 Count-in complete, metronome continues")
+                    // Stop metronome after count-in if not playing during recording
+                    if !session.metronomeWhileRecording {
+                        metronome.stop()
+                        print("🥁 Count-in complete, metronome stopped")
+                    } else {
+                        print("🥁 Count-in complete, metronome continues")
+                    }
+                } else if session.metronomeWhileRecording {
+                    // No count-in but play metronome during recording
+                    print("🥁 Starting metronome for recording...")
+                    metronome.bpm = bpm
+                    metronome.timeSignature = session.timeSignature
+                    await metronome.play()
                 }
-            } else if session.metronomeWhileRecording {
-                // No count-in but play metronome during recording
-                print("🥁 Starting metronome for recording...")
-                metronome.bpm = session.bpm
-                metronome.timeSignature = session.timeSignature
-                await metronome.play()
             }
 
             // Force SwiftUI to update by triggering objectWillChange
@@ -248,8 +237,13 @@ public final class AudioRuntime: ObservableObject {
     func stopRecording(onTrack index: Int) {
         // Show processing indicator
         isProcessing = true
-        processingMessage = "Processing recording..."
+        processingMessage = "Processing Recording"
         objectWillChange.send()
+
+        let startTime = Date()
+
+        // Capture the recording start position before stopping
+        let recordingStartPosition = recorder.activeRecording?.startTime ?? timeline.playhead
 
         recorder.stopRecording(session: &session, trackIndex: index, timeline: timeline)
 
@@ -266,14 +260,25 @@ public final class AudioRuntime: ObservableObject {
         // This ensures pressing "stop record" also stops playback
         player.stop()
         timeline.isPlaying = false
-        // Keep playhead at current position
-        print("⏹️ Stopped recording AND playback, playhead at \(String(format: "%.2f", timeline.playhead))s")
 
-        // Hide processing indicator
-        isProcessing = false
-        processingMessage = ""
-        // Force SwiftUI to update
-        objectWillChange.send()
+        // Move playhead back to the beginning of the recorded section
+        timeline.seek(to: recordingStartPosition)
+        print("⏹️ Stopped recording AND playback, moved playhead back to \(String(format: "%.2f", recordingStartPosition))s")
+
+        // Ensure minimum 3 second display time
+        Task {
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < 3.0 {
+                try? await Task.sleep(nanoseconds: UInt64((3.0 - elapsed) * 1_000_000_000))
+            }
+
+            // Hide processing indicator
+            await MainActor.run {
+                isProcessing = false
+                processingMessage = ""
+                objectWillChange.send()
+            }
+        }
     }
 
     /// Update a region's position on the timeline
@@ -321,13 +326,11 @@ public final class AudioRuntime: ObservableObject {
         objectWillChange.send()
     }
 
-    /// Update a region's trim (duration and file start offset)
+    /// Cut a region at the current playhead position, creating two separate regions
     /// - Parameters:
     ///   - trackIndex: Index of the track containing the region (0-based)
-    ///   - regionIndex: Index of the region within the track
-    ///   - newDuration: New duration after trimming
-    ///   - newFileStartOffset: New file start offset (where to start reading from source file)
-    func updateRegionTrim(trackIndex: Int, regionIndex: Int, newDuration: TimeInterval, newFileStartOffset: TimeInterval) {
+    ///   - regionIndex: Index of the region within the track to cut
+    func cutRegion(trackIndex: Int, regionIndex: Int) {
         // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
             print("⚠️ Invalid track index: \(trackIndex)")
@@ -339,38 +342,62 @@ public final class AudioRuntime: ObservableObject {
             return
         }
 
-        // Don't allow trimming regions while recording
-        guard !timeline.isRecording else {
-            print("⚠️ Cannot trim regions while recording")
+        // Don't allow cutting while recording or playing
+        guard !timeline.isRecording && !timeline.isPlaying else {
+            print("⚠️ Cannot cut regions while recording or playing")
             return
         }
 
         let region = session.tracks[trackIndex].regions[regionIndex]
+        let cutPosition = timeline.playhead
 
-        // Validate trim parameters
-        guard let fileDuration = region.fileDuration else {
-            print("⚠️ Cannot trim region without fileDuration")
+        // Validate that playhead is within this region
+        let regionEnd = region.startTime + region.duration
+        guard cutPosition > region.startTime && cutPosition < regionEnd else {
+            print("⚠️ Playhead is not within region bounds")
             return
         }
 
-        // Ensure we don't exceed the source file duration
-        let maxDuration = fileDuration - newFileStartOffset
-        let clampedDuration = max(0.1, min(newDuration, maxDuration))
-        let clampedFileStartOffset = max(0, min(newFileStartOffset, fileDuration - 0.1))
+        // Calculate split point relative to region start
+        let splitOffset = cutPosition - region.startTime
 
-        // Update the region's duration and file start offset
-        session.tracks[trackIndex].regions[regionIndex].duration = clampedDuration
-        session.tracks[trackIndex].regions[regionIndex].fileStartOffset = clampedFileStartOffset
+        // Create first region (left side of cut)
+        let firstRegion = Region(
+            sourceURL: region.sourceURL,
+            startTime: region.startTime,
+            duration: splitOffset,
+            fileStartOffset: region.fileStartOffset,
+            fileDuration: region.fileDuration,
+            reversed: region.reversed,
+            fadeIn: region.fadeIn,
+            fadeOut: nil, // Remove fade out from first region
+            gainDB: region.gainDB
+        )
 
-        print("✂️ Trimmed region \(regionIndex) on track \(trackIndex + 1): duration=\(String(format: "%.2f", clampedDuration))s, offset=\(String(format: "%.2f", clampedFileStartOffset))s")
+        // Create second region (right side of cut)
+        let secondRegion = Region(
+            sourceURL: region.sourceURL,
+            startTime: cutPosition,
+            duration: region.duration - splitOffset,
+            fileStartOffset: region.fileStartOffset + splitOffset,
+            fileDuration: region.fileDuration,
+            reversed: region.reversed,
+            fadeIn: nil, // Remove fade in from second region
+            fadeOut: region.fadeOut,
+            gainDB: region.gainDB
+        )
 
-        // If playback is active, restart it to reflect the new trim
-        if timeline.isPlaying {
-            Task {
-                stopPlayback(resetPlayhead: false)
-                await startPlayback()
-            }
-        }
+        // Replace the original region with the two new regions
+        session.tracks[trackIndex].regions.remove(at: regionIndex)
+        session.tracks[trackIndex].regions.insert(firstRegion, at: regionIndex)
+        session.tracks[trackIndex].regions.insert(secondRegion, at: regionIndex + 1)
+
+        // Clear selection
+        timeline.selectedRegion = nil
+
+        print("✂️ Cut region at \(String(format: "%.2f", cutPosition))s on track \(trackIndex + 1)")
+        print("   First region: \(String(format: "%.2f", firstRegion.duration))s")
+        print("   Second region: \(String(format: "%.2f", secondRegion.duration))s")
 
         // Force SwiftUI to update
         objectWillChange.send()
@@ -401,14 +428,10 @@ public final class AudioRuntime: ObservableObject {
         let region = session.tracks[trackIndex].regions[regionIndex]
         print("🗑️ Deleting region \(regionIndex) on track \(trackIndex + 1): \(region.sourceURL.lastPathComponent)")
 
-        // Clear selection states if this region is selected or in trim mode
+        // Clear selection state if this region is selected
         if let selected = timeline.selectedRegion,
            selected.trackIndex == trackIndex && selected.regionIndex == regionIndex {
             timeline.selectedRegion = nil
-        }
-        if let trimMode = timeline.trimModeRegion,
-           trimMode.trackIndex == trackIndex && trimMode.regionIndex == regionIndex {
-            timeline.trimModeRegion = nil
         }
 
         // Remove region from session
@@ -486,6 +509,57 @@ public final class AudioRuntime: ObservableObject {
         session.tracks[trackIndex].regions.insert(duplicate, at: regionIndex + 1)
 
         print("📋 Duplicated region \(regionIndex) on track \(trackIndex + 1) at \(String(format: "%.2f", newStartTime))s")
+    }
+
+    /// Move a region from one track to another
+    /// - Parameters:
+    ///   - fromTrackIndex: Index of the source track (0-based)
+    ///   - regionIndex: Index of the region to move
+    ///   - toTrackIndex: Index of the destination track (0-based)
+    func moveRegionToTrack(fromTrackIndex: Int, regionIndex: Int, toTrackIndex: Int) {
+        // Validate source track index
+        guard fromTrackIndex >= 0 && fromTrackIndex < session.tracks.count else {
+            print("⚠️ Invalid source track index: \(fromTrackIndex)")
+            return
+        }
+
+        // Validate destination track index
+        guard toTrackIndex >= 0 && toTrackIndex < session.tracks.count else {
+            print("⚠️ Invalid destination track index: \(toTrackIndex)")
+            return
+        }
+
+        // Validate region index
+        guard regionIndex >= 0 && regionIndex < session.tracks[fromTrackIndex].regions.count else {
+            print("⚠️ Invalid region index: \(regionIndex)")
+            return
+        }
+
+        // Don't allow moving if same track
+        guard fromTrackIndex != toTrackIndex else {
+            print("⚠️ Cannot move region to the same track")
+            return
+        }
+
+        // Don't allow moving regions while recording or playing
+        guard !timeline.isRecording && !timeline.isPlaying else {
+            print("⚠️ Cannot move regions while recording or playing")
+            return
+        }
+
+        // Get the region
+        let region = session.tracks[fromTrackIndex].regions[regionIndex]
+
+        // Remove from source track
+        session.tracks[fromTrackIndex].regions.remove(at: regionIndex)
+
+        // Add to destination track
+        session.tracks[toTrackIndex].regions.append(region)
+
+        // Clear selection since the region has moved
+        timeline.selectedRegion = nil
+
+        print("🔄 Moved region \(regionIndex) from track \(fromTrackIndex + 1) to track \(toTrackIndex + 1)")
 
         // If playback is active, restart it to reflect the duplication
         if timeline.isPlaying {
@@ -539,18 +613,6 @@ public final class AudioRuntime: ObservableObject {
         objectWillChange.send()
     }
 
-    /// Enter trim mode for a region
-    /// - Parameters:
-    ///   - trackIndex: Index of the track containing the region (0-based)
-    ///   - regionIndex: Index of the region to trim
-    func enterTrimMode(trackIndex: Int, regionIndex: Int) {
-        // Set trim mode for this specific region
-        timeline.trimModeRegion = (trackIndex: trackIndex, regionIndex: regionIndex)
-        print("✂️ Entering trim mode for region \(regionIndex) on track \(trackIndex + 1)")
-
-        // The trim handles will appear in RegionView via the isTrimMode computed property
-        // Edit buttons remain visible because selectedRegion is still set
-    }
 
     // MARK: - External Playback Support
 

@@ -59,6 +59,35 @@ public enum FileStore {
         return image
     }
 
+    /// Cover image URL for a mix
+    public static func mixCoverURL(_ mixID: UUID) -> URL {
+        return mixesBaseURL.appendingPathComponent("\(mixID.uuidString)-cover.jpg")
+    }
+
+    /// Load cover image for a mix if it exists
+    public static func loadMixCover(_ mixID: UUID) -> UIImage? {
+        let coverURL = mixCoverURL(mixID)
+        guard FileManager.default.fileExists(atPath: coverURL.path),
+              let imageData = try? Data(contentsOf: coverURL),
+              let image = UIImage(data: imageData) else {
+            return nil
+        }
+        return image
+    }
+
+    /// Save cover image for a mix
+    public static func saveMixCover(_ image: UIImage, for mixID: UUID) throws {
+        guard let jpegData = image.jpegData(compressionQuality: 0.8) else {
+            throw NSError(domain: "FileStore", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to convert image to JPEG"
+            ])
+        }
+
+        let coverURL = mixCoverURL(mixID)
+        try jpegData.write(to: coverURL)
+        print("📷 Saved mix cover image: \(coverURL.lastPathComponent)")
+    }
+
     // MARK: - Region File Management
 
     /// Generates a new unique file URL for a recording region
@@ -262,6 +291,12 @@ public enum FileStore {
         // Delete audio file
         if FileManager.default.fileExists(atPath: mix.fileURL.path) {
             try FileManager.default.removeItem(at: mix.fileURL)
+        }
+
+        // Delete cover image if it exists
+        let coverURL = mixCoverURL(mixID)
+        if FileManager.default.fileExists(atPath: coverURL.path) {
+            try? FileManager.default.removeItem(at: coverURL)
         }
 
         // Delete metadata file

@@ -17,6 +17,9 @@ struct TimelineView: View {
 
     @State private var zoomScale: CGFloat = 2.0
     @State private var lastZoomScale: CGFloat = 2.0
+    @State private var showDeleteConfirmation = false
+    @State private var pendingDeleteTrack: Int?
+    @State private var pendingDeleteRegion: Int?
 
     private var pixelsPerSecond: CGFloat {
         basePixelsPerSecond * zoomScale
@@ -36,28 +39,42 @@ struct TimelineView: View {
                     let trackHeight = tracks.count > 0 ? availableHeight / CGFloat(tracks.count) : 0
 
                     // Single scrollable area containing ruler and tracks
-                    ScrollView(.horizontal, showsIndicators: false) {
+                    ScrollViewReader { scrollProxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
                         VStack(spacing: 0) {
                             // Time ruler (scrolls with content)
                             TimelineRulerView(
                                 timeline: timeline,
                                 pixelsPerSecond: pixelsPerSecond,
                                 maxDuration: maxDuration,
-                                bpm: runtime.session.bpm
+                                bpm: runtime.session.bpm,
+                                timelineMode: runtime.session.timelineMode
                             )
                             .frame(width: totalWidth, height: rulerHeight)
                             .background(Color.tapelabBlack)
 
                             // Timeline content
                             ZStack(alignment: .topLeading) {
-                                // Background grid (beat-based)
-                                let totalBeats = Int(ceil((maxDuration / 60.0) * runtime.session.bpm))
-                                ForEach(0...totalBeats, id: \.self) { beat in
-                                    let beatTime = (Double(beat) / runtime.session.bpm) * 60.0
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .frame(width: 1, height: availableHeight)
-                                        .offset(x: CGFloat(beatTime) * pixelsPerSecond, y: 0)
+                                // Background grid (beat-based or seconds-based)
+                                if runtime.session.timelineMode == .bpm, let bpm = runtime.session.bpm {
+                                    // BPM mode - grid shows beats
+                                    let totalBeats = Int(ceil((maxDuration / 60.0) * bpm))
+                                    ForEach(0...totalBeats, id: \.self) { beat in
+                                        let beatTime = (Double(beat) / bpm) * 60.0
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 1, height: availableHeight)
+                                            .offset(x: CGFloat(beatTime) * pixelsPerSecond, y: 0)
+                                    }
+                                } else {
+                                    // Seconds mode - grid shows seconds
+                                    let totalSeconds = Int(ceil(maxDuration))
+                                    ForEach(0...totalSeconds, id: \.self) { second in
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 1, height: availableHeight)
+                                            .offset(x: CGFloat(second) * pixelsPerSecond, y: 0)
+                                    }
                                 }
 
                                 // Track lanes content (no headers in scrollable area)
@@ -73,10 +90,25 @@ struct TimelineView: View {
                                     pixelsPerSecond: pixelsPerSecond,
                                     totalHeight: availableHeight
                                 )
+
+                                // Invisible anchor for auto-scrolling
+                                Color.clear
+                                    .frame(width: 1, height: 1)
+                                    .offset(x: timeline.playhead * pixelsPerSecond, y: 0)
+                                    .id("playhead")
                             }
                             .frame(width: totalWidth, height: availableHeight)
                         }
                         .contentShape(Rectangle())
+                        }
+                        .onChange(of: timeline.playhead) { oldValue, newValue in
+                            // Auto-scroll during playback/recording
+                            if timeline.isPlaying || timeline.isRecording {
+                                withAnimation(.linear(duration: 0.1)) {
+                                    scrollProxy.scrollTo("playhead", anchor: .center)
+                                }
+                            }
+                        }
                     }
                     .simultaneousGesture(
                         MagnificationGesture()
@@ -112,7 +144,6 @@ struct TimelineView: View {
                                     .onTapGesture {
                                         // Clear selection when tapping on empty space below header
                                         timeline.selectedRegion = nil
-                                        timeline.trimModeRegion = nil
                                     }
                             }
                             .frame(height: trackHeight)
@@ -135,10 +166,20 @@ struct TimelineView: View {
                 .fill(Color.tapelabButtonBg.opacity(0.5))
                 .frame(width: maxDuration * pixelsPerSecond, height: height)
                 .contentShape(Rectangle())
-                .onTapGesture {
-                    // Clear selection when tapping on empty track area
+                .onTapGesture(count: 2) {
+                    // Double tap to arm track (also clears edit mode)
+                    if !timeline.isPlaying && !timeline.isRecording {
+                        // Clear selection/edit mode
+                        timeline.selectedRegion = nil
+
+                        // Arm the track
+                        HapticsManager.shared.trackSelected()
+                        armedTrack = index + 1
+                    }
+                }
+                .onTapGesture(count: 1) {
+                    // Single tap to clear selection when tapping on empty track area
                     timeline.selectedRegion = nil
-                    timeline.trimModeRegion = nil
                 }
 
             // Regions
@@ -162,24 +203,22 @@ struct TimelineView: View {
                             )
                         }
                     },
-                    onTrimChanged: { newDuration, newFileStartOffset in
-                        // Update region trim - find current index by ID
+                    onTrackChanged: { newTrackIndex in
+                        // Move region to different track - find current index by ID
                         if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
-                            runtime.updateRegionTrim(
-                                trackIndex: index,
+                            runtime.moveRegionToTrack(
+                                fromTrackIndex: index,
                                 regionIndex: currentIndex,
-                                newDuration: newDuration,
-                                newFileStartOffset: newFileStartOffset
+                                toTrackIndex: newTrackIndex
                             )
                         }
                     },
-                    onDelete: {
-                        // Delete region - find current index by ID
+                    onDeleteRequested: {
+                        // Store pending delete and show confirmation
                         if let currentIndex = runtime.session.tracks[index].regions.firstIndex(where: { $0.id == region.id }) {
-                            runtime.deleteRegion(
-                                trackIndex: index,
-                                regionIndex: currentIndex
-                            )
+                            pendingDeleteTrack = index
+                            pendingDeleteRegion = currentIndex
+                            showDeleteConfirmation = true
                         }
                     },
                     getRegionBuffer: { trackIdx, regionID in
@@ -189,7 +228,8 @@ struct TimelineView: View {
                             regionID: regionID,
                             session: runtime.session
                         )
-                    }
+                    },
+                    trackHeight: height
                 )
                 .id(region.id.id) // Force new view when region ID changes
             }
@@ -220,5 +260,30 @@ struct TimelineView: View {
             }
         }
         .frame(height: height)
+        .alert(
+            "Delete Region",
+            isPresented: $showDeleteConfirmation
+        ) {
+            Button("Cancel", role: .cancel) {
+                pendingDeleteTrack = nil
+                pendingDeleteRegion = nil
+            }
+            Button("Delete", role: .destructive) {
+                guard let track = pendingDeleteTrack, let region = pendingDeleteRegion else { return }
+                // Clear selection first
+                runtime.timeline.selectedRegion = nil
+                // Delete the region
+                runtime.deleteRegion(trackIndex: track, regionIndex: region)
+                // Clear pending state
+                pendingDeleteTrack = nil
+                pendingDeleteRegion = nil
+            }
+        } message: {
+            if let regionIdx = pendingDeleteRegion {
+                Text("Are you sure you want to delete \"Region \(regionIdx + 1)\"? This action cannot be undone.")
+            } else {
+                Text("Are you sure you want to delete this region? This action cannot be undone.")
+            }
+        }
     }
 }

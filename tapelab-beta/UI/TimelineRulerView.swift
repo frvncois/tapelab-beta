@@ -11,23 +11,32 @@ struct TimelineRulerView: View {
     @ObservedObject var timeline: TimelineState
     let pixelsPerSecond: CGFloat
     let maxDuration: Double
-    let bpm: Double
+    let bpm: Double?
+    let timelineMode: TimelineMode
 
     @State private var isDragging = false
     @State private var lastHapticPosition: CGFloat = 0
 
-    // Convert time to beats
+    // Convert time to beats (only used in BPM mode)
     private func timeToBeat(_ time: Double) -> Double {
+        guard let bpm = bpm else { return 0 }
         return (time / 60.0) * bpm
     }
 
-    // Convert beats to time
+    // Convert beats to time (only used in BPM mode)
     private func beatToTime(_ beat: Double) -> Double {
+        guard let bpm = bpm else { return 0 }
         return (beat / bpm) * 60.0
     }
 
     private var totalBeats: Int {
-        Int(ceil(timeToBeat(maxDuration)))
+        guard timelineMode == .bpm else { return 0 }
+        return Int(ceil(timeToBeat(maxDuration)))
+    }
+
+    private var totalSeconds: Int {
+        guard timelineMode == .seconds else { return 0 }
+        return Int(ceil(maxDuration))
     }
 
     private var totalWidth: CGFloat {
@@ -38,15 +47,25 @@ struct TimelineRulerView: View {
         timeline.playhead * pixelsPerSecond
     }
 
-    // Calculate spacing between beats in pixels
+    // Calculate spacing between beats in pixels (BPM mode only)
     private var beatSpacing: CGFloat {
+        guard let bpm = bpm else { return 0 }
         let beatDuration = 60.0 / bpm
         return CGFloat(beatDuration) * pixelsPerSecond
     }
 
-    // Only show numbers if there's enough space (minimum 45 pixels between beats)
+    // Calculate spacing between seconds in pixels (seconds mode)
+    private var secondSpacing: CGFloat {
+        return pixelsPerSecond
+    }
+
+    // Only show numbers if there's enough space (minimum 45 pixels between markers)
     private var shouldShowNumbers: Bool {
-        return beatSpacing >= 45
+        if timelineMode == .bpm {
+            return beatSpacing >= 45
+        } else {
+            return secondSpacing >= 45
+        }
     }
 
     var body: some View {
@@ -63,48 +82,84 @@ struct TimelineRulerView: View {
                     timeline.playhead = clampedPlayhead
                 }
 
-            // Beat markers (positioned at exact grid lines)
+            // Markers (beats or seconds depending on mode)
             ZStack(alignment: .topLeading) {
-                ForEach(1...totalBeats, id: \.self) { beat in
-                    VStack(spacing: 2) {
-                        // Show beat number only if there's enough space
-                        if shouldShowNumbers {
-                            Text("\(beat)")
-                                .font(.tapelabMonoSmall)
-                                .foregroundColor(.tapelabLight)
-                                .frame(width: 40) // Fixed width for centering
-                                .multilineTextAlignment(.center)
-                        } else {
-                            // Show empty space to maintain layout
-                            Color.clear
-                                .frame(width: 40, height: 14)
+                if timelineMode == .bpm {
+                    // BPM mode - show beats
+                    ForEach(1...totalBeats, id: \.self) { beat in
+                        VStack(spacing: 2) {
+                            if shouldShowNumbers {
+                                Text("\(beat)")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                                    .frame(width: 40)
+                                    .multilineTextAlignment(.center)
+                            } else {
+                                Color.clear
+                                    .frame(width: 40, height: 14)
+                            }
+
+                            Rectangle()
+                                .fill(Color.tapelabLight)
+                                .frame(width: 1, height: 4)
                         }
-
-                        Rectangle()
-                            .fill(Color.tapelabLight)
-                            .frame(width: 1, height: 4)
+                        .frame(width: 40)
+                        .offset(x: beatToTime(Double(beat)) * pixelsPerSecond - 20, y: 0)
                     }
-                    .frame(width: 40) // Fixed width container
-                    .offset(x: beatToTime(Double(beat)) * pixelsPerSecond - 20, y: 0) // Center the 40pt frame on grid line
-                }
 
-                // Quarter beat dots (subdivisions between beats)
-                ForEach(1...totalBeats, id: \.self) { beat in
-                    // Add 3 dots between this beat and the next (at 0.25, 0.5, 0.75 of beat duration)
-                    ForEach(1...3, id: \.self) { subdivision in
-                        let quarterPosition = Double(beat - 1) + (Double(subdivision) * 0.25)
-                        Circle()
-                            .fill(Color.tapelabLight.opacity(0.1))
-                            .frame(width: 3, height: 3)
-                            .offset(
-                                x: beatToTime(quarterPosition) * pixelsPerSecond - 1.5,
-                                y: 13.5
-                            )
+                    // Quarter beat dots
+                    ForEach(1...totalBeats, id: \.self) { beat in
+                        ForEach(1...3, id: \.self) { subdivision in
+                            let quarterPosition = Double(beat - 1) + (Double(subdivision) * 0.25)
+                            Circle()
+                                .fill(Color.tapelabLight.opacity(0.1))
+                                .frame(width: 3, height: 3)
+                                .offset(
+                                    x: beatToTime(quarterPosition) * pixelsPerSecond - 1.5,
+                                    y: 13.5
+                                )
+                        }
+                    }
+                } else {
+                    // Seconds mode - show seconds
+                    ForEach(1...totalSeconds, id: \.self) { second in
+                        VStack(spacing: 2) {
+                            if shouldShowNumbers {
+                                Text("\(second)s")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                                    .frame(width: 40)
+                                    .multilineTextAlignment(.center)
+                            } else {
+                                Color.clear
+                                    .frame(width: 40, height: 14)
+                            }
+
+                            Rectangle()
+                                .fill(Color.tapelabLight)
+                                .frame(width: 1, height: 4)
+                        }
+                        .frame(width: 40)
+                        .offset(x: Double(second) * pixelsPerSecond - 20, y: 0)
+                    }
+
+                    // Quarter second dots (subdivisions between seconds)
+                    ForEach(1...totalSeconds, id: \.self) { second in
+                        ForEach(1...3, id: \.self) { subdivision in
+                            let quarterPosition = Double(second - 1) + (Double(subdivision) * 0.25)
+                            Circle()
+                                .fill(Color.tapelabLight.opacity(0.1))
+                                .frame(width: 3, height: 3)
+                                .offset(
+                                    x: quarterPosition * pixelsPerSecond - 1.5,
+                                    y: 13.5
+                                )
+                        }
                     }
                 }
             }
             .frame(height: 30)
-            .allowsHitTesting(false) // Don't intercept taps, let background handle it
+            .allowsHitTesting(false)
 
             // Playhead handle (larger touch target)
             ZStack {

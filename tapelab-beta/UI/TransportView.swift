@@ -9,6 +9,7 @@ import SwiftUI
 
 struct TransportView: View {
     @ObservedObject var runtime: AudioRuntime
+    @ObservedObject var timeline: TimelineState
     let armedTrack: Int
 
     @State private var rewindTimer: Timer?
@@ -16,6 +17,12 @@ struct TransportView: View {
     @State private var scrubSpeed: Double = 0.0
     @State private var scrubStartTime: Date?
     @State private var showMetronomeSheet = false
+
+    init(runtime: AudioRuntime, armedTrack: Int) {
+        self.runtime = runtime
+        self.timeline = runtime.timeline
+        self.armedTrack = armedTrack
+    }
 
     var body: some View {
         VStack(spacing: 20) {
@@ -45,12 +52,12 @@ struct TransportView: View {
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
                             // Double tap: jump to start
-                            runtime.timeline.seek(to: 0)
+                            timeline.seek(to: 0)
                         }
                         .onTapGesture(count: 1) {
                             // Single tap: rewind 1 second
-                            let newPosition = max(0, runtime.timeline.playhead - 1.0)
-                            runtime.timeline.seek(to: newPosition)
+                            let newPosition = max(0, timeline.playhead - 1.0)
+                            timeline.seek(to: newPosition)
                         }
                         .onLongPressGesture(minimumDuration: 0.3, pressing: { isPressing in
                             if isPressing {
@@ -64,27 +71,27 @@ struct TransportView: View {
 
                     // Play/Stop toggle button
                     Button(action: {
-                        print("🔘 PLAY BUTTON PRESSED")
-                        if runtime.timeline.isPlaying && !runtime.timeline.isRecording {
-                            print("🔘 Stopping playback")
+                        if timeline.isPlaying && !timeline.isRecording {
+                            // Stop playback
                             HapticsManager.shared.stopPressed()
                             runtime.stopPlayback(resetPlayhead: false)
-                        } else if !runtime.timeline.isRecording {
-                            print("🔘 Starting playback")
+                        } else if !timeline.isRecording {
+                            // Start playback
                             HapticsManager.shared.playPressed()
                             Task { await runtime.startPlayback() }
                         }
                     }) {
-                        Image(systemName: (runtime.timeline.isPlaying && !runtime.timeline.isRecording) ? "stop.circle.fill" : "play.circle.fill")
+                        let isPlayingOnly = timeline.isPlaying && !timeline.isRecording
+                        Image(systemName: isPlayingOnly ? "stop.circle.fill" : "play.circle.fill")
                             .font(.title)
-                            .foregroundColor((runtime.timeline.isPlaying && !runtime.timeline.isRecording) ? .tapelabRed : .tapelabGreen)
+                            .foregroundColor(isPlayingOnly ? .tapelabOrange : .tapelabGreen)
                     }
                     .buttonStyle(.plain)
-                    .disabled(runtime.timeline.isRecording)
+                    .disabled(timeline.isRecording)
 
                     // Record/Stop Record toggle button
                     Button(action: {
-                        if runtime.timeline.isRecording {
+                        if timeline.isRecording {
                             HapticsManager.shared.recordStop()
                             runtime.stopRecording(onTrack: armedTrack - 1)
                         } else {
@@ -92,12 +99,12 @@ struct TransportView: View {
                             Task { await runtime.startRecording(onTrack: armedTrack - 1) }
                         }
                     }) {
-                        Image(systemName: runtime.timeline.isRecording ? "stop.circle.fill" : "circle.fill")
+                        Image(systemName: timeline.isRecording ? "stop.circle.fill" : "circle.fill")
                             .font(.title)
                             .foregroundColor(.tapelabRed)
                     }
                     .buttonStyle(.plain)
-                    .disabled(runtime.timeline.isPlaying && !runtime.timeline.isRecording)
+                    .disabled(timeline.isPlaying && !timeline.isRecording)
 
                     // Forward button
                     Image(systemName: "forward.end.fill")
@@ -107,13 +114,13 @@ struct TransportView: View {
                         .onTapGesture(count: 2) {
                             // Double tap: jump to end
                             let maxDuration = runtime.session.maxDuration
-                            runtime.timeline.seek(to: maxDuration)
+                            timeline.seek(to: maxDuration)
                         }
                         .onTapGesture(count: 1) {
                             // Single tap: forward 1 second
                             let maxDuration = runtime.session.maxDuration
-                            let newPosition = min(maxDuration, runtime.timeline.playhead + 1.0)
-                            runtime.timeline.seek(to: newPosition)
+                            let newPosition = min(maxDuration, timeline.playhead + 1.0)
+                            timeline.seek(to: newPosition)
                         }
                         .onLongPressGesture(minimumDuration: 0.3, pressing: { isPressing in
                             if isPressing {
@@ -199,8 +206,8 @@ struct TransportView: View {
                 self.scrubSpeed = 0.5 + (easedSpeed * 9.5)
 
                 // Move playhead backward
-                let newPosition = max(0, self.runtime.timeline.playhead - (self.scrubSpeed * 0.05))
-                self.runtime.timeline.seek(to: newPosition)
+                let newPosition = max(0, self.timeline.playhead - (self.scrubSpeed * 0.05))
+                self.timeline.seek(to: newPosition)
 
                 // Haptic feedback every 100ms
                 if Date().timeIntervalSince(lastHapticTime) >= 0.1 {
@@ -239,8 +246,8 @@ struct TransportView: View {
 
                 // Move playhead forward
                 let maxDuration = self.runtime.session.maxDuration
-                let newPosition = min(maxDuration, self.runtime.timeline.playhead + (self.scrubSpeed * 0.05))
-                self.runtime.timeline.seek(to: newPosition)
+                let newPosition = min(maxDuration, self.timeline.playhead + (self.scrubSpeed * 0.05))
+                self.timeline.seek(to: newPosition)
 
                 // Haptic feedback every 100ms
                 if Date().timeIntervalSince(lastHapticTime) >= 0.1 {

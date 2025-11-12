@@ -138,10 +138,6 @@ struct SessionView: View {
                                 .foregroundColor(TapelabTheme.Colors.accent)
                         }
                     }
-                    .padding(40)
-                    .background(TapelabTheme.Colors.surface)
-                    .cornerRadius(16)
-                    .shadow(radius: 20)
                 }
                 .transition(.opacity)
                 .animation(.easeInOut(duration: 0.2), value: runtime.isProcessing)
@@ -199,6 +195,11 @@ struct SessionView: View {
 
                 // Save mix metadata
                 try FileStore.saveMix(mix)
+
+                // Copy session cover image to mix (if it exists)
+                if let sessionCover = FileStore.loadSessionCover(runtime.session.id) {
+                    try? FileStore.saveMixCover(sessionCover, for: mix.id)
+                }
 
                 // Success
                 await MainActor.run {
@@ -279,9 +280,26 @@ struct SessionView: View {
 struct PlayheadTimeText: View {
     @ObservedObject var timeline: TimelineState
 
+    private var statusColor: Color {
+        if timeline.isRecording {
+            return .tapelabRed
+        } else if timeline.isPlaying {
+            return .tapelabGreen
+        } else {
+            return .tapelabAccentFull
+        }
+    }
+
     var body: some View {
-        Text(String(format: "%.2f s", timeline.playhead))
-            .font(.tapelabMonoSmall)
-            .foregroundColor(.tapelabLight)
+        HStack(spacing: 4) {
+            // Status indicator dot
+            Circle()
+                .fill(statusColor)
+                .frame(width: 3, height: 3)
+
+            Text(String(format: "%.2f s", timeline.playhead))
+                .font(.tapelabMonoSmall)
+                .foregroundColor(.tapelabLight)
+        }
     }
 }

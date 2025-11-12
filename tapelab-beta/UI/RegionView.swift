@@ -18,34 +18,22 @@ struct RegionView: View {
     var timeline: TimelineState? = nil
     var isRecordingTrack: Bool = false
     var onPositionChanged: ((TimeInterval) -> Void)? = nil
-    var onTrimChanged: ((TimeInterval, TimeInterval) -> Void)? = nil
-    var onDelete: (() -> Void)? = nil
+    var onTrackChanged: ((Int) -> Void)? = nil  // New callback for track changes
+    var onDeleteRequested: (() -> Void)? = nil  // Callback to request deletion
     var getRegionBuffer: ((Int, UUID) -> AVAudioPCMBuffer?)? = nil
+    var trackHeight: CGFloat = 0  // Height of each track for calculating target track
 
     @State private var dragOffset: CGFloat = 0
     @State private var isDragging: Bool = false
     @State private var waveformSamples: [Float] = []
     @State private var verticalDragOffset: CGFloat = 0
-    @State private var showDeleteConfirmation: Bool = false
-
-    // Trim mode state
-    @State private var trimStartOffset: CGFloat = 0
-    @State private var trimEndOffset: CGFloat = 0
-    @State private var originalDuration: TimeInterval = 0
-    @State private var originalFileStartOffset: TimeInterval = 0
+    @State private var isDraggingToDelete: Bool = false
 
     // Check if this region is selected (for visual feedback)
     private var isRegionSelected: Bool {
         guard let timeline = timeline else { return false }
         guard let selected = timeline.selectedRegion else { return false }
         return selected.trackIndex == trackIndex && selected.regionIndex == regionIndex
-    }
-
-    // Check if this region is in trim mode (TRIM button was clicked)
-    private var isTrimMode: Bool {
-        guard let timeline = timeline else { return false }
-        guard let trimRegion = timeline.trimModeRegion else { return false }
-        return trimRegion.trackIndex == trackIndex && trimRegion.regionIndex == regionIndex
     }
 
     private var xPosition: CGFloat {
@@ -60,21 +48,8 @@ struct RegionView: View {
             let liveDuration = max(0, timeline.playhead - region.startTime)
             return liveDuration * pixelsPerSecond
         } else {
-            let baseWidth = region.duration * pixelsPerSecond
-            // In trim mode, adjust width based on trim offsets
-            if isTrimMode {
-                return max(40, baseWidth - trimStartOffset - trimEndOffset)
-            }
-            return baseWidth
+            return region.duration * pixelsPerSecond
         }
-    }
-
-    private var adjustedXPosition: CGFloat {
-        // In trim mode, shift right as we trim from start
-        if isTrimMode {
-            return xPosition + trimStartOffset
-        }
-        return xPosition
     }
 
     private var displayDuration: Double {
@@ -120,60 +95,20 @@ struct RegionView: View {
     private var visibleWaveformSamples: [Float] {
         guard !waveformSamples.isEmpty else { return [] }
 
-        // If not in trim mode, return full waveform
-        guard isTrimMode else { return waveformSamples }
-
-        // Calculate trim as percentage of original duration
-        let originalWidth = region.duration * pixelsPerSecond
-        guard originalWidth > 0 else { return waveformSamples }
-
-        let startTrimPercent = trimStartOffset / originalWidth
-        let endTrimPercent = trimEndOffset / originalWidth
-
-        // Calculate slice indices
-        let totalSamples = waveformSamples.count
-        let startIndex = Int(startTrimPercent * Double(totalSamples))
-        let endIndex = totalSamples - Int(endTrimPercent * Double(totalSamples))
-
-        // Clamp to valid range
-        let clampedStart = max(0, min(startIndex, totalSamples))
-        let clampedEnd = max(clampedStart, min(endIndex, totalSamples))
-
-        // Return sliced array
-        return Array(waveformSamples[clampedStart..<clampedEnd])
+        // Waveform is already loaded for the FULL buffer
+        // Just return it as-is - the WaveformView will render what it needs
+        return waveformSamples
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            mainRegionView
-
-            // Trim handles (only visible in trim mode)
-            if isTrimMode {
-                trimHandle(isStart: true)
-                    .offset(x: adjustedXPosition - 6, y: 45)
-
-                trimHandle(isStart: false)
-                    .offset(x: adjustedXPosition + width - 6, y: 45)
-
-                trimButtons()
-                    .offset(x: adjustedXPosition, y: 110)
-            }
-        }
-        .alert("Delete Region?", isPresented: $showDeleteConfirmation) {
-            Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                onDelete?()
-            }
-        } message: {
-            Text("Are you sure you want to delete this region? This action cannot be undone.")
-        }
+        mainRegionView
     }
 
     // MARK: - Main Region View
 
     private var mainRegionView: some View {
         mainRegionContent
-            .offset(x: adjustedXPosition, y: 58 + verticalDragOffset)
+            .offset(x: xPosition, y: 58 + verticalDragOffset)
             .opacity(abs(verticalDragOffset) > 30 ? 0.7 : 1.0)
             .onAppear {
                 loadWaveformData()
@@ -200,13 +135,7 @@ struct RegionView: View {
                     }
                 }
             }
-            .onChange(of: isTrimMode) { _, newValue in
-                // When entering trim mode, initialize trim state
-                if newValue {
-                    enterTrimMode()
-                }
-            }
-            .simultaneousGesture(!isTrimMode ? dragGesture : nil)
+            .simultaneousGesture(dragGesture)
             .onTapGesture(count: 1) {
                 guard let timeline = timeline else { return }
                 guard timeline.isRecording != true else { return }
@@ -218,7 +147,6 @@ struct RegionView: View {
                     timeline.selectedRegion = (trackIndex: trackIndex, regionIndex: regionIndex)
                 }
             }
-            .allowsHitTesting(!isTrimMode)
     }
 
     private var mainRegionContent: some View {
@@ -230,7 +158,6 @@ struct RegionView: View {
             )
             .frame(width: max(width, 40), height: 60)
             .cornerRadius(4)
-            .animation(.linear(duration: 0.016), value: width) // Smooth 60fps animation
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Region \(regionIndex + 1)")
@@ -246,11 +173,10 @@ struct RegionView: View {
             .frame(width: max(width, 40), height: 60, alignment: .topLeading)
         }
         .frame(width: max(width, 40), height: 60, alignment: .topLeading)
-        .animation(.linear(duration: 0.016), value: width) // Smooth 60fps animation
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(regionBorderColor, lineWidth: isDragging || isTrimMode ? 2 : 1)
+                .stroke(regionBorderColor, lineWidth: isDragging ? 2 : 1)
         )
         .overlay(
             isDragging ?
@@ -264,47 +190,117 @@ struct RegionView: View {
     @ViewBuilder
     private var deleteOverlay: some View {
         if abs(verticalDragOffset) > 30 {
-            VStack {
-                Image(systemName: "trash")
-                    .font(.system(size: 24))
-                    .foregroundColor(.red)
-                Text("Release to Delete")
-                    .font(.tapelabMonoTiny)
-                    .foregroundColor(.red)
+            let targetTrack = calculateTargetTrack()
+            let tracksToLast = 3 - trackIndex
+            let offsetToLast = CGFloat(tracksToLast) * trackHeight
+            let beyondLast = abs(verticalDragOffset - offsetToLast)
+            let threshold = trackHeight * 0.5
+            let checkDelete = verticalDragOffset > 0 && targetTrack >= 3 && beyondLast > threshold
+
+            if checkDelete {
+                // Delete zone
+                VStack {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.tapelabRed)
+                    Text("Release to Delete")
+                        .font(.tapelabMonoSmall)
+                        .foregroundColor(.tapelabRed)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.8))
+                .cornerRadius(4)
+            } else {
+                // Track change zone
+                VStack {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 24))
+                        .foregroundColor(.tapelabOrange)
+                    Text("Move to Track \(targetTrack + 1)")
+                        .font(.tapelabMonoTiny)
+                        .foregroundColor(.tapelabOrange)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(4)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.black.opacity(0.7))
-            .cornerRadius(4)
         }
+    }
+
+    private func calculateTargetTrack() -> Int {
+        // Calculate which track based on vertical drag offset
+        // Positive offset = dragging down, negative = dragging up
+        let tracksDelta = Int(round(verticalDragOffset / trackHeight))
+        let targetTrack = trackIndex + tracksDelta
+        // Clamp to valid track range (0-3 for 4 tracks)
+        return max(0, min(3, targetTrack))
+    }
+
+    private func isInDeleteZone() -> Bool {
+        let targetTrack = calculateTargetTrack()
+        let tracksToLast = 3 - trackIndex
+        let offsetToLast = CGFloat(tracksToLast) * trackHeight
+        let beyondLast = abs(verticalDragOffset - offsetToLast)
+        let threshold = trackHeight * 0.5
+
+        // Only in delete zone if we're dragging down past track 4 (index 3)
+        let draggingDown = verticalDragOffset > 0
+        let atOrPastLastTrack = targetTrack >= 3
+        let beyondThreshold = beyondLast > threshold
+
+        return draggingDown && atOrPastLastTrack && beyondThreshold
     }
 
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 5)
             .onChanged { value in
                 guard timeline?.isRecording != true else { return }
+                guard timeline?.isPlaying != true else { return }
 
                 let horizontalAmount = abs(value.translation.width)
                 let verticalAmount = abs(value.translation.height)
 
                 // Determine drag direction
                 if verticalAmount > horizontalAmount && verticalAmount > 30 {
-                    // Vertical drag detected - show delete indicator
+                    // Vertical drag detected - show track change indicator
                     verticalDragOffset = value.translation.height
+
+                    // Update timeline state for delete zone overlay
+                    if let timeline = timeline {
+                        let inDeleteZone = isInDeleteZone()
+                        if timeline.isDraggingToDelete != inDeleteZone {
+                            print("🗑️ Delete zone state: \(inDeleteZone)")
+                            timeline.isDraggingToDelete = inDeleteZone
+                        }
+                    }
                 } else {
                     // Horizontal drag - move region
                     isDragging = true
                     dragOffset = value.translation.width
                     verticalDragOffset = 0
+
+                    // Clear delete state
+                    if let timeline = timeline {
+                        timeline.isDraggingToDelete = false
+                    }
                 }
             }
             .onEnded { value in
                 let horizontalAmount = abs(value.translation.width)
                 let verticalAmount = abs(value.translation.height)
 
-                // Check if this was a vertical drag (delete gesture)
+                // Check if this was a vertical drag (track change or delete gesture)
                 if verticalAmount > horizontalAmount && verticalAmount > 50 {
-                    // Show delete confirmation
-                    showDeleteConfirmation = true
+                    if isInDeleteZone() {
+                        // Delete zone - trigger delete confirmation
+                        onDeleteRequested?()
+                    } else {
+                        // Track change zone - move to target track
+                        let targetTrack = calculateTargetTrack()
+                        if targetTrack != trackIndex {
+                            onTrackChanged?(targetTrack)
+                        }
+                    }
                     verticalDragOffset = 0
                 } else if isDragging {
                     // Horizontal drag - update position
@@ -316,113 +312,12 @@ struct RegionView: View {
                 }
 
                 verticalDragOffset = 0
-            }
-    }
 
-    // MARK: - Trim Mode UI
-
-    @ViewBuilder
-    private func trimHandle(isStart: Bool) -> some View {
-        Rectangle()
-            .fill(Color.tapelabAccentFull)
-            .frame(width: 12, height: 60)
-            .overlay(
-                VStack(spacing: 3) {
-                    Circle().fill(Color.white).frame(width: 3, height: 3)
-                    Circle().fill(Color.white).frame(width: 3, height: 3)
-                    Circle().fill(Color.white).frame(width: 3, height: 3)
+                // Clear delete state
+                if let timeline = timeline {
+                    timeline.isDraggingToDelete = false
                 }
-            )
-            .contentShape(Rectangle()) // Make entire rectangle tappable
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let baseWidth = region.duration * pixelsPerSecond
-
-                        if isStart {
-                            // Trim from start: dragging RIGHT increases offset (trims more)
-                            let dragDistance = value.translation.width
-                            // Limit: can't trim more than region width - 40px
-                            let maxTrim = baseWidth - 40
-                            trimStartOffset = max(0, min(dragDistance, maxTrim - trimEndOffset))
-                        } else {
-                            // Trim from end: dragging LEFT increases trim (negative drag = more trim)
-                            let dragDistance = -value.translation.width
-                            // Limit: can't trim more than region width - 40px
-                            let maxTrim = baseWidth - 40
-                            trimEndOffset = max(0, min(dragDistance, maxTrim - trimStartOffset))
-                        }
-                    }
-                    .onEnded { _ in
-                        // Keep the offsets for confirm/cancel
-                        print("✂️ Trim handle \(isStart ? "START" : "END"): offset=\(isStart ? trimStartOffset : trimEndOffset)px")
-                    }
-            )
-    }
-
-    @ViewBuilder
-    private func trimButtons() -> some View {
-        HStack(spacing: 8) {
-            Button(action: confirmTrim) {
-                Text("Confirm")
-                    .font(.tapelabMonoSmall)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.green)
-                    .cornerRadius(4)
             }
-
-            Button(action: cancelTrim) {
-                Text("Cancel")
-                    .font(.tapelabMonoSmall)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.red)
-                    .cornerRadius(4)
-            }
-        }
-    }
-
-    // MARK: - Trim Mode Actions
-
-    private func enterTrimMode() {
-        // Initialize trim state when entering trim mode
-        trimStartOffset = 0
-        trimEndOffset = 0
-        originalDuration = region.duration
-        originalFileStartOffset = region.fileStartOffset
-        print("✂️ Entered trim mode for region \(region.id.id)")
-    }
-
-    private func confirmTrim() {
-        // Calculate new duration and file offset
-        let startTrimTime = trimStartOffset / pixelsPerSecond
-        let endTrimTime = trimEndOffset / pixelsPerSecond
-        let newDuration = max(0.1, originalDuration - startTrimTime - endTrimTime)
-        let newFileStartOffset = originalFileStartOffset + startTrimTime
-
-        // Call the callback
-        onTrimChanged?(newDuration, newFileStartOffset)
-
-        // Exit trim mode and deselect region
-        exitTrimMode()
-    }
-
-    private func cancelTrim() {
-        exitTrimMode()
-    }
-
-    private func exitTrimMode() {
-        // Clear trim state
-        trimStartOffset = 0
-        trimEndOffset = 0
-
-        // Clear trim mode but keep region selected (so edit buttons remain visible)
-        timeline?.trimModeRegion = nil
-
-        print("✂️ Exited trim mode")
     }
 
     // MARK: - Waveform Loading

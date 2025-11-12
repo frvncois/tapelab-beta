@@ -1,6 +1,13 @@
 import SwiftUI
+import Lottie
 
 struct SettingsView: View {
+    @State private var showAboutView = false
+    @State private var showTermsView = false
+    @State private var showPrivacyView = false
+    @State private var showContactSupport = false
+    @State private var showHelpCenter = false
+
     var body: some View {
         ZStack {
             TapelabTheme.Colors.background
@@ -11,38 +18,39 @@ struct SettingsView: View {
                     // Pro Plan Card
                     ProPlanCard()
 
-                    // Help & Support Section
-                    SettingsSectionView(title: "Help & Support") {
-                        SettingsRowView(
-                            icon: "questionmark.circle",
-                            title: "Help Center",
-                            action: {}
-                        )
-                        SettingsRowView(
-                            icon: "envelope",
-                            title: "Contact Support",
-                            showSeparator: false,
-                            action: {}
-                        )
-                    }
+                    // Help & Support Box with Lottie
+                    HelpSupportCard(showHelpCenter: $showHelpCenter)
 
                     // About Section
                     SettingsSectionView(title: "About") {
                         SettingsRowView(
                             icon: "info.circle",
                             title: "About Tapelab",
-                            action: {}
+                            action: {
+                                showAboutView = true
+                            }
                         )
                         SettingsRowView(
                             icon: "doc.text",
                             title: "Terms of Service",
-                            action: {}
+                            action: {
+                                showTermsView = true
+                            }
                         )
                         SettingsRowView(
                             icon: "hand.raised",
                             title: "Privacy Policy",
+                            action: {
+                                showPrivacyView = true
+                            }
+                        )
+                        SettingsRowView(
+                            icon: "envelope",
+                            title: "Contact Support",
                             showSeparator: false,
-                            action: {}
+                            action: {
+                                showContactSupport = true
+                            }
                         )
                     }
 
@@ -50,6 +58,63 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
+            }
+        }
+        .sheet(isPresented: $showAboutView) {
+            AboutView()
+        }
+        .sheet(isPresented: $showTermsView) {
+            TermsOfServiceView()
+        }
+        .sheet(isPresented: $showPrivacyView) {
+            PrivacyPolicyView()
+        }
+        .sheet(isPresented: $showContactSupport) {
+            ContactSupportView()
+        }
+        .sheet(isPresented: $showHelpCenter) {
+            HelpCenterView()
+        }
+    }
+}
+
+struct HelpSupportCard: View {
+    @Binding var showHelpCenter: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Square container with background image and Lottie
+            ZStack {
+                // Background image
+                Image("background")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 200)
+                    .clipped()
+                    .cornerRadius(12)
+
+                // Lottie animation overlay
+                LottieView(animation: .named("loop"))
+                    .playing(loopMode: .loop)
+                    .resizable()
+                    .frame(width: 200, height: 200)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .cornerRadius(12)
+
+            // Help Center button
+            Button(action: {
+                showHelpCenter = true
+            }) {
+                Text("HELP CENTER")
+                    .font(.tapelabMonoSmall)
+                    .foregroundColor(.tapelabLight)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(Color.tapelabRed)
+                    .cornerRadius(8)
             }
         }
     }
@@ -189,8 +254,8 @@ struct SettingsRowView: View {
                         .frame(width: 24, height: 24)
 
                     // Text content
-                    Text(title)
-                        .font(.tapelabMono)
+                    Text(title.uppercased())
+                        .font(.tapelabMonoSmall)
                         .foregroundColor(TapelabTheme.Colors.text)
 
                     Spacer()
@@ -203,12 +268,6 @@ struct SettingsRowView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(TapelabTheme.Colors.surface)
-            }
-
-            // Separator
-            if showSeparator {
-                Divider()
-                    .background(Color.tapelabDark)
             }
         }
     }

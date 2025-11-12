@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct MetronomeSheetView: View {
     @ObservedObject var runtime: AudioRuntime
@@ -15,12 +16,15 @@ struct MetronomeSheetView: View {
     @State private var localTimeSignature: TimeSignature = .fourFour
     @State private var countInEnabled: Bool = true
     @State private var playWhileRecording: Bool = false
+    @State private var applyToSession: Bool = false
     @State private var lastSliderHapticTime = Date()
     @State private var pulseScale: CGFloat = 1.0
+    @State private var pulseTimer: Timer?
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
+            ScrollView {
+                VStack(spacing: 32) {
                 // Header
                 Text("Metronome")
                     .font(.tapelabMonoHeadline)
@@ -62,6 +66,19 @@ struct MetronomeSheetView: View {
                         .onChange(of: localBPM) { newValue in
                             // Update metronome BPM in real-time
                             runtime.metronome.bpm = newValue
+
+                            // If BPM is applied to session, update it in real-time
+                            if applyToSession {
+                                var updatedSession = runtime.session
+                                updatedSession.bpm = newValue
+                                runtime.session = updatedSession
+                                // Force UI update
+                                runtime.objectWillChange.send()
+                            }
+
+                            // Restart pulse animation with new BPM
+                            restartPulseAnimation()
+
                             // Rate-limited haptic feedback
                             if Date().timeIntervalSince(lastSliderHapticTime) >= 0.1 {
                                 HapticsManager.shared.sliderAdjusted()
@@ -85,7 +102,7 @@ struct MetronomeSheetView: View {
 
                 // Time Signature Picker - Brand Theme Style
                 VStack(spacing: 12) {
-                    Text("Time Signature")
+                    Text("TIME SIGNATURE")
                         .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
 
@@ -117,27 +134,55 @@ struct MetronomeSheetView: View {
                     .padding(.horizontal, 32)
                 }
 
-                // Recording Options
+                // Apply to Session Toggle
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Recording Options")
-                        .font(.tapelabMonoSmall)
-                        .foregroundColor(.tapelabLight)
+                    HStack {
+                        Toggle(isOn: $applyToSession) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("APPLY BPM TO SESSION")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                            }
+                        }
+                        .toggleStyle(SwitchToggleStyle(tint: .tapelabGreen))
+                        .onChange(of: applyToSession) { newValue in
+                            HapticsManager.shared.effectToggled()
+                            // Update session timeline mode immediately
+                            var updatedSession = runtime.session
+                            if newValue {
+                                updatedSession.bpm = localBPM
+                                updatedSession.timelineMode = .bpm
+                            } else {
+                                updatedSession.timelineMode = .seconds
+                            }
+                            // Reassign session to trigger @Published wrapper
+                            runtime.session = updatedSession
+                            // Force UI update
+                            runtime.objectWillChange.send()
+                        }
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                // Recording Options
+                VStack(alignment: .leading, spacing: 32) {
 
                     // Count-in toggle
                     HStack {
                         Toggle(isOn: $countInEnabled) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Count-in Before Recording")
-                                    .font(.tapelabMono)
+                                Text("COUNT-IN BEFORE RECORDING")
+                                    .font(.tapelabMonoSmall)
                                     .foregroundColor(.tapelabLight)
-                                Text("Play \(localTimeSignature.beatsPerMeasure) beats before recording starts")
-                                    .font(.tapelabMonoTiny)
-                                    .foregroundColor(.tapelabAccentFull)
                             }
                         }
                         .toggleStyle(SwitchToggleStyle(tint: .tapelabGreen))
-                        .onChange(of: countInEnabled) { _ in
+                        .onChange(of: countInEnabled) { newValue in
                             HapticsManager.shared.effectToggled()
+                            // Auto-enable "Apply to Session" when enabling count-in
+                            if newValue && !applyToSession {
+                                applyToSession = true
+                            }
                         }
                     }
 
@@ -145,25 +190,27 @@ struct MetronomeSheetView: View {
                     HStack {
                         Toggle(isOn: $playWhileRecording) {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Play While Recording")
-                                    .font(.tapelabMono)
+                                Text("PLAY WHILE RECORDING")
+                                    .font(.tapelabMonoSmall)
                                     .foregroundColor(.tapelabLight)
-                                Text("Keep metronome playing during recording")
-                                    .font(.tapelabMonoTiny)
-                                    .foregroundColor(.tapelabAccentFull)
                             }
                         }
                         .toggleStyle(SwitchToggleStyle(tint: .tapelabGreen))
-                        .onChange(of: playWhileRecording) { _ in
+                        .onChange(of: playWhileRecording) { newValue in
                             HapticsManager.shared.effectToggled()
+                            // Auto-enable "Apply to Session" when enabling play while recording
+                            if newValue && !applyToSession {
+                                applyToSession = true
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 32)
-                .padding(.bottom, 24)
+                .padding(.bottom, 32)
             }
             .frame(maxWidth: .infinity)
-            .background(Color.tapelabBackground)
+            }
+            .background(Color.tapelabDark)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -179,11 +226,14 @@ struct MetronomeSheetView: View {
         }
         .onAppear {
             // Initialize local BPM and time signature from session (source of truth)
-            localBPM = runtime.session.bpm
+            localBPM = runtime.session.bpm ?? 120.0
             localTimeSignature = runtime.session.timeSignature
-            // Sync metronome with session BPM and time signature
-            runtime.metronome.bpm = runtime.session.bpm
+            applyToSession = runtime.session.timelineMode == .bpm
+
+            // Sync metronome with local BPM and time signature
+            runtime.metronome.bpm = localBPM
             runtime.metronome.timeSignature = runtime.session.timeSignature
+
             // Initialize recording options from session
             countInEnabled = runtime.session.metronomeCountIn
             playWhileRecording = runtime.session.metronomeWhileRecording
@@ -197,13 +247,27 @@ struct MetronomeSheetView: View {
             startPulseAnimation()
         }
         .onDisappear {
-            // Apply all changes to session when sheet closes
-            runtime.session.bpm = localBPM
-            runtime.session.timeSignature = localTimeSignature
-            runtime.session.metronomeCountIn = countInEnabled
-            runtime.session.metronomeWhileRecording = playWhileRecording
+            // Apply changes to session when sheet closes
+            var updatedSession = runtime.session
+            updatedSession.timeSignature = localTimeSignature
+            updatedSession.metronomeCountIn = countInEnabled
+            updatedSession.metronomeWhileRecording = playWhileRecording
 
-            // Stop metronome when sheet closes
+            // Update timeline mode and BPM based on "Apply to Session" toggle
+            if applyToSession {
+                updatedSession.bpm = localBPM
+                updatedSession.timelineMode = .bpm
+            } else {
+                updatedSession.timelineMode = .seconds
+            }
+
+            // Reassign session to trigger @Published wrapper
+            runtime.session = updatedSession
+            // Force UI update
+            runtime.objectWillChange.send()
+
+            // Stop pulse animation and metronome when sheet closes
+            stopPulseAnimation()
             runtime.metronome.stop()
         }
     }
@@ -211,19 +275,50 @@ struct MetronomeSheetView: View {
     // MARK: - Pulse Animation
 
     private func startPulseAnimation() {
-        // Create repeating pulse based on BPM
+        // Calculate beat duration from BPM (beats per minute -> seconds per beat)
         let beatDuration = 60.0 / localBPM
 
-        withAnimation(.easeInOut(duration: beatDuration / 2)) {
+        // Start from base scale
+        pulseScale = 1.0
+
+        // Immediately pulse on first beat
+        withAnimation(.easeOut(duration: 0.1)) {
             pulseScale = 1.15
         }
-
-        // Schedule repeating pulse
-        Timer.scheduledTimer(withTimeInterval: beatDuration, repeats: true) { _ in
+        withAnimation(.easeIn(duration: beatDuration - 0.1).delay(0.1)) {
             pulseScale = 1.0
-            withAnimation(.easeInOut(duration: beatDuration / 2)) {
+        }
+
+        // Schedule precise repeating timer on main run loop
+        pulseTimer = Timer.scheduledTimer(withTimeInterval: beatDuration, repeats: true) { [self] _ in
+            // Reset to base immediately (on the beat)
+            pulseScale = 1.0
+
+            // Quick pulse out
+            withAnimation(.easeOut(duration: 0.1)) {
                 pulseScale = 1.15
             }
+
+            // Slow return to base
+            withAnimation(.easeIn(duration: beatDuration - 0.1).delay(0.1)) {
+                pulseScale = 1.0
+            }
         }
+
+        // Ensure timer fires on common run loop modes (won't be blocked by scrolling)
+        if let timer = pulseTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    private func stopPulseAnimation() {
+        pulseTimer?.invalidate()
+        pulseTimer = nil
+        pulseScale = 1.0
+    }
+
+    private func restartPulseAnimation() {
+        stopPulseAnimation()
+        startPulseAnimation()
     }
 }

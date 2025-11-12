@@ -14,6 +14,7 @@ struct TrackHeaderView: View {
     let runtime: AudioRuntime
     @State private var showFXSheet = false
     @State private var showVOLSheet = false
+    @State private var showDeleteConfirmation = false
 
     private var trackColor: Color {
         switch trackNumber {
@@ -51,15 +52,21 @@ struct TrackHeaderView: View {
                 .frame(height: 1)
 
             HStack(spacing: 8) {
-                // Armed indicator dot
-                Circle()
-                    .fill(isArmed ? Color.tapelabRed : Color.tapelabAccentFull)
-                    .frame(width: 6, height: 6)
+                // Armed indicator dot + Track number label (tappable to arm)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(isArmed ? Color.tapelabRed : Color.tapelabAccentFull)
+                        .frame(width: 6, height: 6)
 
-                // Track number label
-                Text("Track \(trackNumber)")
-                    .font(.tapelabMonoSmall)
-                    .foregroundColor(.tapelabLight)
+                    Text("Track \(trackNumber)")
+                        .font(.tapelabMonoSmall)
+                        .foregroundColor(.tapelabLight)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    HapticsManager.shared.trackSelected()
+                    armedTrack = trackNumber
+                }
 
                 Spacer()
 
@@ -90,6 +97,21 @@ struct TrackHeaderView: View {
         }
         .sheet(isPresented: $showVOLSheet) {
             VOLSheetView(track: $track, runtime: runtime)
+        }
+        .alert(
+            "Delete Region",
+            isPresented: $showDeleteConfirmation,
+            presenting: selectedRegionIndex
+        ) { regionIndex in
+            Button("Cancel", role: .cancel) {}
+            Button("Delete", role: .destructive) {
+                // Clear selection FIRST to avoid index out of bounds when UI re-renders
+                runtime.timeline.selectedRegion = nil
+                // Then delete the region
+                runtime.deleteRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
+            }
+        } message: { regionIndex in
+            Text("Are you sure you want to delete \"Region \(regionIndex + 1)\"? This action cannot be undone.")
         }
     }
 
@@ -132,12 +154,12 @@ struct TrackHeaderView: View {
 
     private var editModeButtons: some View {
         HStack(spacing: 8) {
-            // TRIM Button
+            // CUT Button
             Button(action: {
                 guard let regionIndex = selectedRegionIndex else { return }
-                runtime.enterTrimMode(trackIndex: trackNumber - 1, regionIndex: regionIndex)
+                runtime.cutRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
             }) {
-                Text("TRIM")
+                Text("CUT")
                     .font(.tapelabMonoTiny)
                     .frame(width: 40, height: 20)
             }
@@ -148,7 +170,6 @@ struct TrackHeaderView: View {
                 guard let regionIndex = selectedRegionIndex else { return }
                 // Clear selection first, then duplicate
                 runtime.timeline.selectedRegion = nil
-                runtime.timeline.trimModeRegion = nil
                 runtime.duplicateRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
             }) {
                 Text("DUP")
@@ -167,16 +188,12 @@ struct TrackHeaderView: View {
                     .font(.tapelabMonoTiny)
                     .frame(width: 40, height: 20)
             }
-            .buttonStyle(TapelabButtonStyle())
+            .buttonStyle(TapelabButtonStyle(isActive: selectedRegionIndex.map { track.regions[$0].reversed } ?? false))
 
             // DELETE Button
             Button(action: {
-                guard let regionIndex = selectedRegionIndex else { return }
-                // Clear selection FIRST to avoid index out of bounds when UI re-renders
-                runtime.timeline.selectedRegion = nil
-                runtime.timeline.trimModeRegion = nil
-                // Then delete the region
-                runtime.deleteRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
+                guard selectedRegionIndex != nil else { return }
+                showDeleteConfirmation = true
             }) {
                 Text("DEL")
                     .font(.tapelabMonoTiny)

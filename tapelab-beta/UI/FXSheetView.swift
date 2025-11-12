@@ -16,156 +16,257 @@ struct FXSheetView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Reverb
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("REVERB")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.secondary)
+            ZStack {
+                TapelabTheme.Colors.background
+                    .ignoresSafeArea()
 
-                        HStack {
-                            Text("Mix")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.0f%%", track.fx.reverb.wetMix))
-                                .font(.caption)
-                                .monospacedDigit()
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // REVERB Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Section header with dot
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.tapelabLight)
+                                    .frame(width: 3, height: 3)
+
+                                Text("REVERB")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                            }
+
+                            VStack(spacing: 16) {
+                                // Mix control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("MIX")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.0f%%", track.fx.reverb.wetMix))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.reverb.wetMix) },
+                                        set: { newValue in
+                                            track.fx.reverb.wetMix = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: 0...100, step: 1)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+
+                                // Room Size control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("ROOM SIZE")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(track.fx.reverb.roomSize ? "LARGE HALL" : "SMALL ROOM")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                    }
+                                    Toggle("", isOn: Binding(
+                                        get: { track.fx.reverb.roomSize },
+                                        set: { newValue in
+                                            track.fx.reverb.roomSize = newValue
+                                            applyFXUpdate()
+                                            HapticsManager.shared.effectToggled()
+                                        }
+                                    ))
+                                    .labelsHidden()
+                                    .tint(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+                            }
                         }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.reverb.wetMix) },
-                            set: { newValue in
-                                track.fx.reverb.wetMix = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: 0...100, step: 1)
 
-                        Toggle("Large Hall", isOn: Binding(
-                            get: { track.fx.reverb.roomSize },
-                            set: { newValue in
-                                track.fx.reverb.roomSize = newValue
-                                applyFXUpdate()
-                                HapticsManager.shared.effectToggled()
+                        // DELAY Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Section header with dot
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.tapelabLight)
+                                    .frame(width: 3, height: 3)
+
+                                Text("DELAY")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
                             }
-                        ))
-                        .font(.caption)
+
+                            VStack(spacing: 16) {
+                                // Mix control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("MIX")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.0f%%", track.fx.delay.wetMix))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.delay.wetMix) },
+                                        set: { newValue in
+                                            track.fx.delay.wetMix = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: 0...100, step: 1)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+
+                                // Time control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("TIME")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.2f S", track.fx.delay.time))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { track.fx.delay.time },
+                                        set: { newValue in
+                                            track.fx.delay.time = newValue
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: 0.01...2.0, step: 0.01)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+
+                                // Feedback control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("FEEDBACK")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.0f%%", track.fx.delay.feedback))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.delay.feedback) },
+                                        set: { newValue in
+                                            track.fx.delay.feedback = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: 0...100, step: 1)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+                            }
+                        }
+
+                        // SATURATION Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Section header with dot
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(Color.tapelabLight)
+                                    .frame(width: 3, height: 3)
+
+                                Text("SATURATION")
+                                    .font(.tapelabMonoSmall)
+                                    .foregroundColor(.tapelabLight)
+                            }
+
+                            VStack(spacing: 16) {
+                                // Mix control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("MIX")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.0f%%", track.fx.saturation.wetMix))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.saturation.wetMix) },
+                                        set: { newValue in
+                                            track.fx.saturation.wetMix = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: 0...100, step: 1)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+
+                                // Drive control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("DRIVE")
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(String(format: "%.1f DB", track.fx.saturation.preGain))
+                                            .font(.tapelabMono)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
+                                    }
+                                    Slider(value: Binding(
+                                        get: { Double(track.fx.saturation.preGain) },
+                                        set: { newValue in
+                                            track.fx.saturation.preGain = Float(newValue)
+                                            applyFXUpdate()
+                                            triggerSliderHaptic()
+                                        }
+                                    ), in: -40...40, step: 0.5)
+                                    .accentColor(.tapelabAccentFull)
+                                }
+                                .padding(16)
+                                .background(TapelabTheme.Colors.surface)
+                                .cornerRadius(8)
+                            }
+                        }
+
+                        Spacer(minLength: 20)
                     }
-
-                    Divider()
-
-                    // Delay
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("DELAY")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.secondary)
-
-                        HStack {
-                            Text("Mix")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.0f%%", track.fx.delay.wetMix))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.delay.wetMix) },
-                            set: { newValue in
-                                track.fx.delay.wetMix = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: 0...100, step: 1)
-
-                        HStack {
-                            Text("Time")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.2f s", track.fx.delay.time))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { track.fx.delay.time },
-                            set: { newValue in
-                                track.fx.delay.time = newValue
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: 0.01...2.0, step: 0.01)
-
-                        HStack {
-                            Text("Feedback")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.0f%%", track.fx.delay.feedback))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.delay.feedback) },
-                            set: { newValue in
-                                track.fx.delay.feedback = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: 0...100, step: 1)
-                    }
-
-                    Divider()
-
-                    // Saturation
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("SATURATION")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.secondary)
-
-                        HStack {
-                            Text("Mix")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.0f%%", track.fx.saturation.wetMix))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.saturation.wetMix) },
-                            set: { newValue in
-                                track.fx.saturation.wetMix = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: 0...100, step: 1)
-
-                        HStack {
-                            Text("Drive")
-                                .font(.caption)
-                            Spacer()
-                            Text(String(format: "%.1f dB", track.fx.saturation.preGain))
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-                        Slider(value: Binding(
-                            get: { Double(track.fx.saturation.preGain) },
-                            set: { newValue in
-                                track.fx.saturation.preGain = Float(newValue)
-                                applyFXUpdate()
-                                triggerSliderHaptic()
-                            }
-                        ), in: -40...40, step: 0.5)
-                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 16)
                 }
-                .padding()
             }
             .navigationTitle("Track \(track.number) FX")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    Button(action: {
                         dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.tapelabAccentFull)
                     }
                 }
             }

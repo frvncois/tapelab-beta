@@ -139,12 +139,18 @@ public struct SessionMetadata: Codable, Identifiable {
     }
 }
 
+public enum TimelineMode: String, Codable {
+    case seconds
+    case bpm
+}
+
 public struct Session: Codable, Identifiable {
     public let id: UUID
     public var name: String
     public var createdAt: Date
-    public var bpm: Double
+    public var bpm: Double?  // Optional - nil means no BPM set
     public var timeSignature: TimeSignature
+    public var timelineMode: TimelineMode  // seconds or bpm
     public var metronomeCountIn: Bool  // Play 4-count before recording starts
     public var metronomeWhileRecording: Bool  // Keep metronome playing during recording
     public var tracks: [Track]
@@ -154,14 +160,15 @@ public struct Session: Codable, Identifiable {
 
     // Exclude maxDuration from encoding/decoding
     enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, bpm, timeSignature, metronomeCountIn, metronomeWhileRecording, tracks
+        case id, name, createdAt, bpm, timeSignature, timelineMode, metronomeCountIn, metronomeWhileRecording, tracks
     }
 
     public init(id: UUID = UUID(),
                 name: String,
                 createdAt: Date = Date(),
-                bpm: Double = 120,
+                bpm: Double? = nil,
                 timeSignature: TimeSignature = .fourFour,
+                timelineMode: TimelineMode = .seconds,
                 metronomeCountIn: Bool = false,
                 metronomeWhileRecording: Bool = false,
                 tracks: [Track] = (1...4).map { Track(number: $0, isArmed: $0 == 1) }) {
@@ -170,6 +177,7 @@ public struct Session: Codable, Identifiable {
         self.createdAt = createdAt
         self.bpm = bpm
         self.timeSignature = timeSignature
+        self.timelineMode = timelineMode
         self.metronomeCountIn = metronomeCountIn
         self.metronomeWhileRecording = metronomeWhileRecording
         self.tracks = tracks
@@ -193,8 +201,8 @@ public final class TimelineState: ObservableObject {
     // Region selection state for edit mode
     @Published public var selectedRegion: (trackIndex: Int, regionIndex: Int)? = nil
 
-    // Trim mode state - separate from selection so trim only shows when TRIM button is clicked
-    @Published public var trimModeRegion: (trackIndex: Int, regionIndex: Int)? = nil
+    // Drag-to-delete state - shows trash icon when dragging region to delete
+    @Published public var isDraggingToDelete: Bool = false
 
     private var displayLink: CADisplayLink?
     private var lastUpdateTime: TimeInterval = 0
