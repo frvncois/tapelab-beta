@@ -12,8 +12,7 @@ struct FXSheetView: View {
     let runtime: AudioRuntime
     @Environment(\.dismiss) var dismiss
 
-    @State private var lastSliderHapticTime = Date()
-
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -50,7 +49,6 @@ struct FXSheetView: View {
                                         set: { newValue in
                                             track.fx.reverb.wetMix = Float(newValue)
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
@@ -93,7 +91,6 @@ struct FXSheetView: View {
                                         set: { newValue in
                                             track.fx.delay.wetMix = Float(newValue)
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
@@ -116,7 +113,6 @@ struct FXSheetView: View {
                                         set: { newValue in
                                             track.fx.delay.time = newValue
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: 0.01...2.0, step: 0.01)
                                     .accentColor(.tapelabAccentFull)
@@ -139,7 +135,6 @@ struct FXSheetView: View {
                                         set: { newValue in
                                             track.fx.delay.feedback = Float(newValue)
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
@@ -154,7 +149,6 @@ struct FXSheetView: View {
                         Button(action: {
                             track.fx.resetFX()
                             applyFXUpdate()
-                            HapticsManager.shared.effectToggled()
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.counterclockwise")
@@ -202,11 +196,4 @@ struct FXSheetView: View {
         }
     }
 
-    private func triggerSliderHaptic() {
-        // Rate-limit haptics to every 100ms to avoid overwhelming the haptic engine
-        if Date().timeIntervalSince(lastSliderHapticTime) >= 0.1 {
-            HapticsManager.shared.sliderAdjusted()
-            lastSliderHapticTime = Date()
-        }
-    }
 }

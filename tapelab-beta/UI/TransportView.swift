@@ -29,7 +29,6 @@ struct TransportView: View {
         VStack(spacing: 20) {
             HStack(spacing: 12) {
                 Button(action: {
-                    HapticsManager.shared.trackSelected()
                     toggleLoopMode()
                 }) {
                     Text("LOOP")
@@ -67,10 +66,8 @@ struct TransportView: View {
 
                     Button(action: {
                         if timeline.isPlaying && !timeline.isRecording {
-                            HapticsManager.shared.stopPressed()
                             runtime.stopPlayback(resetPlayhead: false)
                         } else if !timeline.isRecording {
-                            HapticsManager.shared.playPressed()
                             Task { await runtime.startPlayback() }
                         }
                     }) {
@@ -85,10 +82,8 @@ struct TransportView: View {
                     // Record/Stop Record toggle button
                     Button(action: {
                         if timeline.isRecording {
-                            HapticsManager.shared.recordStop()
                             runtime.stopRecording(onTrack: armedTrack - 1)
                         } else {
-                            HapticsManager.shared.recordStart()
                             Task {
                                 let success = await runtime.startRecording(onTrack: armedTrack - 1)
                                 if !success {
@@ -194,7 +189,6 @@ struct TransportView: View {
     private func startRewindScrub() {
         scrubStartTime = Date()
         scrubSpeed = 0.0
-        var lastHapticTime = Date()
 
         rewindTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [self] _ in
             Task { @MainActor in
@@ -213,12 +207,6 @@ struct TransportView: View {
                 // Move playhead backward
                 let newPosition = max(0, self.timeline.playhead - (self.scrubSpeed * 0.05))
                 self.timeline.seek(to: newPosition)
-
-                // Haptic feedback every 100ms
-                if Date().timeIntervalSince(lastHapticTime) >= 0.1 {
-                    HapticsManager.shared.scrubTick()
-                    lastHapticTime = Date()
-                }
             }
         }
     }
@@ -233,7 +221,6 @@ struct TransportView: View {
     private func startForwardScrub() {
         scrubStartTime = Date()
         scrubSpeed = 0.0
-        var lastHapticTime = Date()
 
         forwardTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [self] _ in
             Task { @MainActor in
@@ -253,12 +240,6 @@ struct TransportView: View {
                 let maxDuration = self.runtime.session.maxDuration
                 let newPosition = min(maxDuration, self.timeline.playhead + (self.scrubSpeed * 0.05))
                 self.timeline.seek(to: newPosition)
-
-                // Haptic feedback every 100ms
-                if Date().timeIntervalSince(lastHapticTime) >= 0.1 {
-                    HapticsManager.shared.scrubTick()
-                    lastHapticTime = Date()
-                }
             }
         }
     }

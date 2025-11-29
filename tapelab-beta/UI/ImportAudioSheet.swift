@@ -444,7 +444,6 @@ struct ImportAudioSheet: View {
                 ForEach(0..<session.tracks.count, id: \.self) { index in
                     Button(action: {
                         selectedTrackIndex = index
-                        HapticsManager.shared.trackSelected()
                     }) {
                         Text("Track \(index + 1)")
                             .font(.tapelabMonoTiny)
@@ -599,8 +598,6 @@ struct ImportAudioSheet: View {
                 }
             }
 
-            HapticsManager.shared.playPressed()
-
         } catch {
             errorMessage = "Playback failed: \(error.localizedDescription)"
         }
@@ -613,8 +610,6 @@ struct ImportAudioSheet: View {
         playbackTimer = nil
         isPlaying = false
         currentPlaybackTime = 0
-
-        HapticsManager.shared.stopPressed()
     }
 
     // MARK: - Import Action
@@ -664,7 +659,6 @@ struct ImportAudioSheet: View {
                         // Notify runtime to reload
                         runtime.objectWillChange.send()
 
-                        HapticsManager.shared.recordStop()
                         dismiss()
                     } catch {
                         errorMessage = "Failed to save session: \(error.localizedDescription)"

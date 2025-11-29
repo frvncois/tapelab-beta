@@ -13,7 +13,6 @@ struct TimelineRulerView: View {
     let maxDuration: Double
 
     @State private var isDragging = false
-    @State private var lastHapticPosition: CGFloat = 0
     @State private var isDraggingLoopStart = false
     @State private var isDraggingLoopEnd = false
 
@@ -118,27 +117,16 @@ struct TimelineRulerView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        // Haptic on drag start
                         if !isDragging {
-                            HapticsManager.shared.playheadDragStart()
                             isDragging = true
-                            lastHapticPosition = value.location.x
                         }
 
                         // Use absolute location.x directly - follows your finger
                         let newPosition = max(0, min(value.location.x, totalWidth))
                         let newPlayhead = newPosition / pixelsPerSecond
                         timeline.playhead = newPlayhead
-
-                        // Periodic haptic feedback while dragging (every ~50 pixels)
-                        if abs(value.location.x - lastHapticPosition) > 50 {
-                            HapticsManager.shared.playheadDragging()
-                            lastHapticPosition = value.location.x
-                        }
                     }
                     .onEnded { _ in
-                        // Haptic on drag end
-                        HapticsManager.shared.playheadDragEnd()
                         isDragging = false
                     }
             )
@@ -179,7 +167,6 @@ struct TimelineRulerView: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if !isDraggingLoopStart {
-                            HapticsManager.shared.playheadDragStart()
                             isDraggingLoopStart = true
                         }
 
@@ -188,7 +175,6 @@ struct TimelineRulerView: View {
                         timeline.loopStart = newLoopStart
                     }
                     .onEnded { _ in
-                        HapticsManager.shared.playheadDragEnd()
                         isDraggingLoopStart = false
                     }
             )
@@ -211,7 +197,6 @@ struct TimelineRulerView: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if !isDraggingLoopEnd {
-                            HapticsManager.shared.playheadDragStart()
                             isDraggingLoopEnd = true
                         }
 
@@ -220,7 +205,6 @@ struct TimelineRulerView: View {
                         timeline.loopEnd = newLoopEnd
                     }
                     .onEnded { _ in
-                        HapticsManager.shared.playheadDragEnd()
                         isDraggingLoopEnd = false
                     }
             )

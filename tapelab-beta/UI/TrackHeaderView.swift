@@ -66,7 +66,6 @@ struct TrackHeaderView: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    HapticsManager.shared.trackSelected()
                     armedTrack = trackNumber
                 }
 
@@ -165,7 +164,6 @@ struct TrackHeaderView: View {
 
             // ARM Button (Record arm)
             Button(action: {
-                HapticsManager.shared.trackSelected()
                 armedTrack = trackNumber
             }) {
                 Text("ARM")

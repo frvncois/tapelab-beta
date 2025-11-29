@@ -164,7 +164,6 @@ struct TimelineView: View {
                         timeline.selectedRegion = nil
 
                         // Arm the track
-                        HapticsManager.shared.trackSelected()
                         armedTrack = index + 1
                     }
                 }

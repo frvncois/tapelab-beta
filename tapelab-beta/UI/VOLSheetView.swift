@@ -12,8 +12,7 @@ struct VOLSheetView: View {
     let runtime: AudioRuntime
     @Environment(\.dismiss) var dismiss
 
-    @State private var lastSliderHapticTime = Date()
-
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -54,7 +53,6 @@ struct VOLSheetView: View {
                                         set: { newValue in
                                             track.fx.volumeDB = newValue
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: -40...12, step: 0.5)
                                     .accentColor(.tapelabAccentFull)
@@ -79,7 +77,6 @@ struct VOLSheetView: View {
                                         set: { newValue in
                                             track.fx.pan = Float(newValue)
                                             applyFXUpdate()
-                                            triggerSliderHaptic()
                                         }
                                     ), in: -1...1, step: 0.1)
                                     .accentColor(.tapelabAccentFull)
@@ -129,7 +126,6 @@ struct VOLSheetView: View {
                                                 set: { newValue in
                                                     track.fx.eqBands[index].frequency = newValue
                                                     applyFXUpdate()
-                                                    triggerSliderHaptic()
                                                 }
                                             ), in: frequencyRange(for: index), step: frequencyStep(for: index))
                                             .accentColor(.tapelabAccentFull)
@@ -152,7 +148,6 @@ struct VOLSheetView: View {
                                                 set: { newValue in
                                                     track.fx.eqBands[index].gainDB = newValue
                                                     applyFXUpdate()
-                                                    triggerSliderHaptic()
                                                 }
                                             ), in: -12...12, step: 0.5)
                                             .accentColor(.tapelabAccentFull)
@@ -175,7 +170,6 @@ struct VOLSheetView: View {
                                                 set: { newValue in
                                                     track.fx.eqBands[index].q = newValue
                                                     applyFXUpdate()
-                                                    triggerSliderHaptic()
                                                 }
                                             ), in: 0.5...3.0, step: 0.1)
                                             .accentColor(.tapelabAccentFull)
@@ -198,7 +192,6 @@ struct VOLSheetView: View {
                         Button(action: {
                             track.fx.resetVolume()
                             applyFXUpdate()
-                            HapticsManager.shared.effectToggled()
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.counterclockwise")
@@ -246,13 +239,6 @@ struct VOLSheetView: View {
         }
     }
 
-    private func triggerSliderHaptic() {
-        // Rate-limit haptics to every 100ms to avoid overwhelming the haptic engine
-        if Date().timeIntervalSince(lastSliderHapticTime) >= 0.1 {
-            HapticsManager.shared.sliderAdjusted()
-            lastSliderHapticTime = Date()
-        }
-    }
 
     // MARK: - EQ Helper Functions
 

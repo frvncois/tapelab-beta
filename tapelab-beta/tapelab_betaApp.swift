@@ -35,5 +35,3 @@ struct tapelab_betaApp: App {
         }
     }
 }
-
-// Keep AudioTestView for debugging purposes
