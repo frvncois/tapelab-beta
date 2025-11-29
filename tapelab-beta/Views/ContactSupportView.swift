@@ -50,7 +50,7 @@ struct ContactSupportView: View {
                                             .font(.tapelabMono)
                                             .foregroundColor(.tapelabLight)
 
-                                        Text("Help us improve Tapelab")
+                                        Text("Help us improve 4TRACK")
                                             .font(.tapelabMonoTiny)
                                             .foregroundColor(.tapelabLight.opacity(0.6))
                                     }

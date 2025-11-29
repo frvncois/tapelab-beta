@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import AVFAudio
+@preconcurrency import AVFAudio
 import UniformTypeIdentifiers
 import Combine
 
@@ -50,11 +50,6 @@ struct ImportAudioSheet: View {
         self.runtime = runtime
         self.sourceFileURL = sourceFileURL
 
-        print("🏗️ ImportAudioSheet initialized")
-        print("🏗️ Source URL: \(sourceFileURL)")
-        print("🏗️ Source file exists: \(FileManager.default.fileExists(atPath: sourceFileURL.path))")
-        print("🏗️ Playhead: \(playheadPosition)")
-        print("🏗️ Session tracks: \(session.wrappedValue.tracks.count)")
     }
 
     var body: some View {
@@ -71,15 +66,9 @@ struct ImportAudioSheet: View {
             }
         }
         .onAppear {
-            print("📱 ImportAudioSheet appeared")
-            print("📱 Source file: \(sourceFileURL.lastPathComponent)")
-            print("📱 Playhead position: \(playheadPosition)")
-            print("📱 Session has \(session.tracks.count) tracks")
-            print("📱 isLoading: \(isLoading)")
             loadAudioFile()
         }
         .onDisappear {
-            print("📱 ImportAudioSheet disappeared")
             stopPlayback()
         }
     }
@@ -121,38 +110,44 @@ struct ImportAudioSheet: View {
     // MARK: - Main Content
 
     private var mainContentView: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Header
-                headerView
+        NavigationView {
+            ZStack {
+                TapelabTheme.Colors.background
+                    .ignoresSafeArea()
 
-                Divider()
-                    .background(Color.tapelabLight.opacity(0.2))
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Waveform display with integrated crop controls
+                        waveformView
 
-                // Waveform display with integrated crop controls
-                waveformView
+                        // Track selection
+                        trackSelectionView
 
-                // Playback controls
-                playbackControlsView
+                        Spacer()
 
-                // Track selection
-                trackSelectionView
-
-                Spacer()
-
-                // Action buttons
-                actionButtonsView
+                        // Action buttons
+                        actionButtonsView
+                    }
+                    .padding()
+                }
             }
-            .padding()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Import Audio")
+                        .font(.tapelabMono)
+                        .foregroundColor(.tapelabLight)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.tapelabAccentFull)
+                    }
+                }
+            }
         }
-    }
-
-    // MARK: - Header
-
-    private var headerView: some View {
-        Text("IMPORT AUDIO")
-            .font(.tapelabMonoBold)
-            .foregroundColor(.tapelabLight)
     }
 
     // MARK: - File Info
@@ -205,7 +200,11 @@ struct ImportAudioSheet: View {
                     backgroundColor: Color.tapelabButtonBg.opacity(0.4)
                 )
                 .frame(height: 120)
-                .cornerRadius(4)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.tapelabLight.opacity(0.2), lineWidth: 1)
+                )
 
                 // Crop region overlay
                 if cropEnabled {
@@ -280,30 +279,53 @@ struct ImportAudioSheet: View {
             }
             .frame(height: 120)
 
-            // Crop duration display
-            HStack {
-                Text("Duration:")
-                    .font(.tapelabMonoSmall)
-                    .foregroundColor(.tapelabLight.opacity(0.7))
-                Spacer()
-                Text(formatTime(cropDuration))
-                    .font(.tapelabMono)
-                    .foregroundColor(cropDuration > maxImportDuration ? .tapelabRed : .tapelabLight)
-                    .monospacedDigit()
-            }
-
-            if cropDuration > maxImportDuration {
+            // Crop controls in a box
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.tapelabRed)
-                    Text("Duration exceeds 6 minute maximum")
-                        .font(.tapelabMonoTiny)
-                        .foregroundColor(.tapelabRed)
+                    Button(action: togglePlayback) {
+                        HStack(spacing: 6) {
+                            Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                                .font(.system(size: 14))
+                            Text(isPlaying ? "STOP PREVIEW" : "PLAY PREVIEW")
+                                .font(.tapelabMonoSmall)
+                        }
+                        .foregroundColor(.tapelabLight)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.tapelabButtonBg)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("DURATION")
+                            .font(.tapelabMonoTiny)
+                            .foregroundColor(.tapelabLight.opacity(0.5))
+                        Text(formatTime(cropDuration))
+                            .font(.tapelabMono)
+                            .foregroundColor(cropDuration > maxImportDuration ? .tapelabRed : .tapelabLight)
+                            .monospacedDigit()
+                    }
                 }
-                .padding(8)
-                .background(Color.tapelabRed.opacity(0.1))
-                .cornerRadius(4)
+
+                if cropDuration > maxImportDuration {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.tapelabRed)
+                        Text("Duration exceeds 6 minute maximum")
+                            .font(.tapelabMonoTiny)
+                            .foregroundColor(.tapelabRed)
+                    }
+                    .padding(8)
+                    .background(Color.tapelabRed.opacity(0.1))
+                    .cornerRadius(4)
+                }
             }
+            .padding(12)
+            .background(TapelabTheme.Colors.surface)
+            .cornerRadius(8)
         }
     }
 
@@ -403,51 +425,36 @@ struct ImportAudioSheet: View {
         }
     }
 
-    // MARK: - Playback Controls
-
-    private var playbackControlsView: some View {
-        Button(action: togglePlayback) {
-            HStack {
-                Image(systemName: isPlaying ? "stop.fill" : "play.fill")
-                    .font(.system(size: 16))
-                Text(isPlaying ? "STOP PREVIEW" : "PLAY PREVIEW")
-                    .font(.tapelabMonoSmall)
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Color.tapelabGreen)
-            .cornerRadius(8)
-        }
-    }
-
     // MARK: - Track Selection
 
     private var trackSelectionView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ADD TO TRACK")
-                .font(.tapelabMonoSmall)
-                .foregroundColor(.tapelabLight)
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color.tapelabLight)
+                    .frame(width: 3, height: 3)
 
-            // Horizontal layout with metronome-style buttons
-            HStack(spacing: 12) {
+                Text("ADD TO TRACK")
+                    .font(.tapelabMonoSmall)
+                    .foregroundColor(.tapelabLight)
+            }
+
+            // Track selector buttons (LOOP/TEMP style)
+            HStack(spacing: 8) {
                 ForEach(0..<session.tracks.count, id: \.self) { index in
                     Button(action: {
                         selectedTrackIndex = index
                         HapticsManager.shared.trackSelected()
                     }) {
                         Text("Track \(index + 1)")
-                            .font(.tapelabMonoSmall)
+                            .font(.tapelabMonoTiny)
                             .lineLimit(1)
-                            .foregroundColor(selectedTrackIndex == index ? .tapelabOrange : .tapelabLight)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(selectedTrackIndex == index ? Color.tapelabButtonBg.opacity(0.8) : Color.tapelabButtonBg)
+                            .foregroundColor(selectedTrackIndex == index ? .tapelabBlack : .tapelabLight)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selectedTrackIndex == index ? Color.tapelabOrange : Color.tapelabButtonBg)
                             .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(selectedTrackIndex == index ? Color.tapelabOrange : Color.clear, lineWidth: 1)
-                            )
                     }
                     .buttonStyle(.plain)
                 }
@@ -475,21 +482,12 @@ struct ImportAudioSheet: View {
     // MARK: - Audio Loading
 
     private func loadAudioFile() {
-        print("🎵 Starting to load audio file...")
-        print("🎵 File URL: \(sourceFileURL)")
-        print("🎵 File exists: \(FileManager.default.fileExists(atPath: sourceFileURL.path))")
 
         Task.detached(priority: .userInitiated) {
-            print("🎵 Background task started for audio loading")
             do {
                 // Load audio file
-                print("🎵 Creating AVAudioFile...")
                 let file = try AVAudioFile(forReading: sourceFileURL)
-                print("🎵 AVAudioFile created successfully")
-                print("🎵 Format: \(file.processingFormat)")
-                print("🎵 Length: \(file.length) frames")
                 let duration = Double(file.length) / file.processingFormat.sampleRate
-                print("🎵 Duration: \(duration) seconds")
 
                 // Read entire file into buffer
                 let frameCount = AVAudioFrameCount(file.length)
@@ -506,17 +504,12 @@ struct ImportAudioSheet: View {
 
                 try file.read(into: buffer, frameCount: frameCount)
                 buffer.frameLength = frameCount
-                print("🎵 Buffer loaded: \(buffer.frameLength) frames")
 
                 // Generate waveform
-                print("🎵 Generating waveform...")
                 let waveform = WaveformGenerator.generateWaveformData(from: buffer, targetPoints: 500)
-                print("🎵 Waveform generated: \(waveform.count) points")
 
                 // Update UI on main thread
-                print("🎵 Updating UI on main thread...")
                 await MainActor.run {
-                    print("🎵 Main actor: Setting audio data...")
                     audioFile = file
                     audioBuffer = buffer
                     fileDuration = duration
@@ -530,21 +523,16 @@ struct ImportAudioSheet: View {
                     cropDuration = initialDuration
 
                     if duration > maxImportDuration {
-                        print("🎵 File exceeds max duration, crop set to 6 minutes")
                     } else {
-                        print("🎵 Crop enabled with full file duration")
                     }
 
                     isLoading = false
-                    print("🎵 ✅ Audio loading complete! isLoading = false")
                 }
 
             } catch {
-                print("🎵 ❌ Error loading audio: \(error)")
                 await MainActor.run {
                     errorMessage = "Failed to load audio file: \(error.localizedDescription)"
                     isLoading = false
-                    print("🎵 Error state set, isLoading = false")
                 }
             }
         }
@@ -564,7 +552,6 @@ struct ImportAudioSheet: View {
         guard audioFile != nil else { return }
 
         do {
-            print("🎵 Starting preview playback...")
 
             // DON'T reconfigure audio session - use the existing playAndRecord session
             // The app's AudioRuntime has already configured it properly
@@ -573,13 +560,9 @@ struct ImportAudioSheet: View {
             // Create player directly without changing session
             audioPlayer = try AVAudioPlayer(contentsOf: sourceFileURL)
             guard let player = audioPlayer else {
-                print("⚠️ Failed to create audio player")
                 return
             }
 
-            print("🎵 AVAudioPlayer created successfully")
-            print("🎵 Player duration: \(player.duration)s")
-            print("🎵 Player format: \(player.format.sampleRate)Hz, \(player.format.channelCount)ch")
 
             player.prepareToPlay()
 
@@ -587,22 +570,18 @@ struct ImportAudioSheet: View {
             if cropEnabled {
                 player.currentTime = cropStartTime
                 currentPlaybackTime = cropStartTime
-                print("🎵 Starting playback from crop start: \(String(format: "%.2f", cropStartTime))s")
             } else {
                 player.currentTime = 0
                 currentPlaybackTime = 0
-                print("🎵 Starting playback from beginning")
             }
 
             let success = player.play()
             if !success {
-                print("⚠️ AVAudioPlayer.play() returned false")
                 errorMessage = "Failed to start playback"
                 return
             }
 
             isPlaying = true
-            print("✅ Playback started successfully")
 
             // Start timer to update playback position and stop at crop end
             playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak player] _ in
@@ -611,13 +590,11 @@ struct ImportAudioSheet: View {
 
                 // Stop at crop end if enabled
                 if cropEnabled && player.currentTime >= cropEndTime {
-                    print("🎵 Reached crop end, stopping playback")
                     stopPlayback()
                 }
 
                 // Stop at natural end
                 if !player.isPlaying {
-                    print("🎵 Playback finished naturally")
                     stopPlayback()
                 }
             }
@@ -625,13 +602,11 @@ struct ImportAudioSheet: View {
             HapticsManager.shared.playPressed()
 
         } catch {
-            print("⚠️ Playback error: \(error)")
             errorMessage = "Playback failed: \(error.localizedDescription)"
         }
     }
 
     private func stopPlayback() {
-        print("🎵 Stopping preview playback")
         audioPlayer?.stop()
         audioPlayer = nil
         playbackTimer?.invalidate()
@@ -640,7 +615,6 @@ struct ImportAudioSheet: View {
         currentPlaybackTime = 0
 
         HapticsManager.shared.stopPressed()
-        print("✅ Playback stopped")
     }
 
     // MARK: - Import Action
@@ -686,7 +660,6 @@ struct ImportAudioSheet: View {
                     // Save session
                     do {
                         try FileStore.saveSession(session)
-                        print("✅ Imported audio to Track \(selectedTrackIndex + 1) at \(formatTime(playheadPosition))")
 
                         // Notify runtime to reload
                         runtime.objectWillChange.send()
@@ -773,7 +746,6 @@ struct ImportAudioSheet: View {
             try outputFile.write(from: outputBuffer)
         }
 
-        print("✅ Converted and exported audio: \(fileDuration)s")
     }
 
     private func exportCroppedAudio(to targetURL: URL) async throws {
@@ -879,7 +851,6 @@ struct ImportAudioSheet: View {
             }
         }
 
-        print("✅ Exported cropped audio: \(cropDuration)s starting at \(cropStartTime)s")
     }
 
     // MARK: - Helpers

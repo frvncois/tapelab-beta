@@ -12,17 +12,17 @@ extension Color {
     // Brand Colors
     static let tapelabDark = Color(hex: "1D1613")
     static let tapelabBlack = Color(hex: "17120F")
-    static let tapelabAccentFull = Color(hex: "#D3C9AE") // Full opacity version for buttons
-    static let tapelabAccent = Color(hex: "C3B9A1", opacity: 0.1) // 10% opacity version
+    static let tapelabAccentFull = Color(hex: "#D3C9AE")
+    static let tapelabAccent = Color(hex: "C3B9A1", opacity: 0.1)
     static let tapelabRed = Color(hex: "EB3933")
     static let tapelabGreen = Color(hex: "4A9147")
     static let tapelabOrange = Color(hex: "D08024")
     static let tapelabLight = Color(hex: "F0DBA4")
 
     // Button specific colors
-    static let tapelabButtonBg = Color(hex: "29221F") // FX & VOL button background
-    static let tapelabButtonBorder = Color(hex: "3E362F") // Button border
-    static let tapelabArmButtonBg = Color(hex: "3E362F") // ARM button background (inactive)
+    static let tapelabButtonBg = Color(hex: "29221F")
+    static let tapelabButtonBorder = Color(hex: "3E362F")
+    static let tapelabArmButtonBg = Color(hex: "3E362F")
 
     // Semantic Colors
     static let tapelabBackground = tapelabDark

@@ -59,11 +59,14 @@ struct DashboardView: View {
                 .scaledToFill()
                 .ignoresSafeArea(edges: .top)
 
-            // Lottie Logo Animation
-            LottieLogoView()
-                .padding(.vertical, 10)
+            // SVG Logo
+            Image("logo")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 30)
+                .padding(.vertical, 20)
         }
-        .frame(height: 60)
+        .frame(height: 50)
     }
 
     @ViewBuilder
@@ -157,7 +160,6 @@ struct DashboardView: View {
                     showStudio = true
                 }
             } catch {
-                print("⚠️ Failed to load session: \(error)")
 
                 // Still respect minimum time even on error
                 let elapsed = Date().timeIntervalSince(startTime)

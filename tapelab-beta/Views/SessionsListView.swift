@@ -5,8 +5,12 @@ struct SessionsListView: View {
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var sortOrder: SortOrder = .dateNewest
+    @State private var showSessionLimitAlert = false
+    @State private var isProUser = false  // TODO: Connect to actual Pro subscription status
 
-    let onCreateSession: (UUID) -> Void  // Pass session ID instead of full session
+    let onCreateSession: (UUID) -> Void
+
+    private let maxFreeSessions = 4
 
     enum SortOrder: String, CaseIterable {
         case dateNewest = "Date (Newest)"
@@ -21,7 +25,6 @@ struct SessionsListView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Header with title, sort, and search (only show if there are sessions)
                 if !sessionMetadata.isEmpty {
                     listHeader
                         .padding(.bottom, 20)
@@ -34,7 +37,6 @@ struct SessionsListView: View {
                 }
             }
 
-            // Floating Create Session Button
             VStack {
                 Spacer()
                 HStack {
@@ -62,20 +64,25 @@ struct SessionsListView: View {
             loadSessions()
         }
         .onDisappear {
-            // Reset search when leaving view
             searchText = ""
             isSearching = false
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ReloadSessions"))) { _ in
-            // Reload sessions when returning from Studio (to catch name changes, etc.)
             loadSessions()
+        }
+        .alert(
+            "Session Limit Reached",
+            isPresented: $showSessionLimitAlert
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Free users are limited to \(maxFreeSessions) sessions. Upgrade to 4TRACK Pro for unlimited sessions.")
         }
     }
 
     private var listHeader: some View {
         VStack(spacing: 20) {
             HStack(spacing: 12) {
-                // Title Badge with dot
                 HStack(spacing: 8) {
                     Circle()
                         .fill(Color.tapelabLight)
@@ -88,7 +95,6 @@ struct SessionsListView: View {
 
                 Spacer()
 
-                // Sort Menu (rounded)
                 Menu {
                     ForEach(SortOrder.allCases, id: \.self) { order in
                         Button(action: {
@@ -117,7 +123,6 @@ struct SessionsListView: View {
                     .cornerRadius(16)
                 }
 
-                // Search Toggle (rounded)
                 Button(action: {
                     isSearching.toggle()
                     if !isSearching {
@@ -143,7 +148,7 @@ struct SessionsListView: View {
                         .font(.system(size: 14))
 
                     TextField("Search sessions...", text: $searchText)
-                        .font(.tapelabMono)
+                        .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
@@ -185,7 +190,7 @@ struct SessionsListView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 100) // Space for floating button
+            .padding(.bottom, 100)
         }
         .background(TapelabTheme.Colors.background)
     }
@@ -206,7 +211,6 @@ struct SessionsListView: View {
             sessionMetadata = try FileStore.loadAllSessionMetadata()
             sortSessions()
         } catch {
-            print("⚠️ Failed to load session metadata: \(error)")
             sessionMetadata = []
         }
     }
@@ -225,6 +229,12 @@ struct SessionsListView: View {
     }
 
     private func createNewSession() {
+        // Check session limit for free users
+        if !isProUser && sessionMetadata.count >= maxFreeSessions {
+            showSessionLimitAlert = true
+            return
+        }
+
         // Create a new session with auto-generated ID and default name
         let sessionID = UUID()
 
@@ -248,7 +258,6 @@ struct SessionsListView: View {
             // Trigger navigation to Studio with the session ID
             onCreateSession(sessionID)
         } catch {
-            print("⚠️ Failed to create session: \(error)")
             // TODO: Show error alert to user
         }
     }
@@ -263,35 +272,43 @@ struct SessionsListView: View {
 struct SessionGridItemView: View {
     let metadata: SessionMetadata
     @State private var coverImage: UIImage? = nil
+    @State private var refreshID = UUID()
 
     var body: some View {
         VStack(spacing: 8) {
             // Square session cover or icon
-            ZStack {
-                if let coverImage = coverImage {
-                    Image(uiImage: coverImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 150)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(TapelabTheme.Colors.background)
-                        .frame(height: 150)
-                        .overlay(
-                            Image(systemName: "waveform")
-                                .font(.system(size: 40))
-                                .foregroundColor(TapelabTheme.Colors.accent)
-                        )
+            GeometryReader { geometry in
+                ZStack {
+                    if let coverImage = coverImage {
+                        Image(uiImage: coverImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.width)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.tapelabButtonBg)
+                            .frame(width: geometry.size.width, height: geometry.size.width)
+                            .overlay(
+                                Image(systemName: "waveform")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.tapelabLight)
+                            )
+                    }
                 }
             }
             .aspectRatio(1.0, contentMode: .fit)
+            .id(refreshID)
             .onAppear {
                 loadCoverImage()
             }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ReloadSessions"))) { _ in
+                loadCoverImage()
+                refreshID = UUID()
+            }
 
-            // Session title
-            Text(metadata.name)
+            // Session title (max 16 characters)
+            Text(String(metadata.name.prefix(16)))
                 .font(.tapelabMono)
                 .foregroundColor(TapelabTheme.Colors.text)
                 .lineLimit(2)

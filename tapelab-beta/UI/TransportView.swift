@@ -11,72 +11,65 @@ struct TransportView: View {
     @ObservedObject var runtime: AudioRuntime
     @ObservedObject var timeline: TimelineState
     let armedTrack: Int
+    var onBounce: (() -> Void)?
 
     @State private var rewindTimer: Timer?
     @State private var forwardTimer: Timer?
     @State private var scrubSpeed: Double = 0.0
     @State private var scrubStartTime: Date?
-    @State private var showMetronomeSheet = false
 
-    init(runtime: AudioRuntime, armedTrack: Int) {
+    init(runtime: AudioRuntime, armedTrack: Int, onBounce: (() -> Void)? = nil) {
         self.runtime = runtime
         self.timeline = runtime.timeline
         self.armedTrack = armedTrack
+        self.onBounce = onBounce
     }
 
     var body: some View {
         VStack(spacing: 20) {
-            // Top row: [TUNER] - - - [controls] - - - [MTRO]
             HStack(spacing: 12) {
-                // Tuner Button (left)
                 Button(action: {
-                    // TODO: Tuner functionality
+                    HapticsManager.shared.trackSelected()
+                    toggleLoopMode()
                 }) {
-                    Text("TUNER")
+                    Text("LOOP")
                         .font(.tapelabMonoTiny)
-                        .foregroundColor(.tapelabLight)
+                        .foregroundColor(timeline.isLoopMode ? .tapelabBlack : .tapelabLight)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.tapelabButtonBg)
+                        .background(timeline.isLoopMode ? Color.tapelabOrange : Color.tapelabButtonBg)
                         .cornerRadius(16)
                 }
+                .disabled(timeline.isRecording)
+                .opacity(timeline.isRecording ? 0.5 : 1.0)
 
                 Spacer()
 
-                // Main transport controls - centered
                 HStack(spacing: 16) {
-                    // Rewind button
                     Image(systemName: "backward.end.fill")
                         .font(.title2)
                         .foregroundColor(.tapelabAccentFull)
                         .contentShape(Rectangle())
                         .onTapGesture(count: 2) {
-                            // Double tap: jump to start
                             timeline.seek(to: 0)
                         }
                         .onTapGesture(count: 1) {
-                            // Single tap: rewind 1 second
                             let newPosition = max(0, timeline.playhead - 1.0)
                             timeline.seek(to: newPosition)
                         }
                         .onLongPressGesture(minimumDuration: 0.3, pressing: { isPressing in
                             if isPressing {
-                                // Start scrubbing backward
                                 startRewindScrub()
                             } else {
-                                // Stop scrubbing
                                 stopRewindScrub()
                             }
                         }, perform: {})
 
-                    // Play/Stop toggle button
                     Button(action: {
                         if timeline.isPlaying && !timeline.isRecording {
-                            // Stop playback
                             HapticsManager.shared.stopPressed()
                             runtime.stopPlayback(resetPlayhead: false)
                         } else if !timeline.isRecording {
-                            // Start playback
                             HapticsManager.shared.playPressed()
                             Task { await runtime.startPlayback() }
                         }
@@ -96,7 +89,13 @@ struct TransportView: View {
                             runtime.stopRecording(onTrack: armedTrack - 1)
                         } else {
                             HapticsManager.shared.recordStart()
-                            Task { await runtime.startRecording(onTrack: armedTrack - 1) }
+                            Task {
+                                let success = await runtime.startRecording(onTrack: armedTrack - 1)
+                                if !success {
+                                    // Recording didn't start (headphones not connected)
+                                    // Alert is already shown by AudioRuntime
+                                }
+                            }
                         }
                     }) {
                         Image(systemName: timeline.isRecording ? "stop.circle.fill" : "circle.fill")
@@ -135,11 +134,11 @@ struct TransportView: View {
 
                 Spacer()
 
-                // Tempo Button (right)
+                // Bounce button (right side)
                 Button(action: {
-                    showMetronomeSheet = true
+                    onBounce?()
                 }) {
-                    Text("TEMP")
+                    Text("BOUNCE")
                         .font(.tapelabMonoTiny)
                         .foregroundColor(.tapelabLight)
                         .padding(.horizontal, 10)
@@ -147,6 +146,8 @@ struct TransportView: View {
                         .background(Color.tapelabButtonBg)
                         .cornerRadius(16)
                 }
+                .disabled(timeline.isRecording || timeline.isPlaying)
+                .opacity((timeline.isRecording || timeline.isPlaying) ? 0.5 : 1.0)
             }
             .padding(.horizontal)
 
@@ -179,9 +180,6 @@ struct TransportView: View {
         .padding(.horizontal)
         .padding(.bottom)
         .background(Color.tapelabBlack)
-        .sheet(isPresented: $showMetronomeSheet) {
-            MetronomeSheetView(runtime: runtime)
-        }
     }
 
     // MARK: - Scrubbing Helper Functions
@@ -272,6 +270,28 @@ struct TransportView: View {
         } else {
             let f = (2 * t) - 2
             return 0.5 * f * f * f + 1
+        }
+    }
+
+    // Toggle loop mode
+    private func toggleLoopMode() {
+        // Don't allow toggling loop during recording
+        guard !timeline.isRecording else { return }
+
+        timeline.isLoopMode.toggle()
+
+        if timeline.isLoopMode {
+            // Enable loop mode - set loop region starting at current playhead with 2s duration
+            timeline.loopStart = timeline.playhead
+            timeline.loopEnd = timeline.playhead + 2.0
+
+            // Ensure loop end doesn't exceed max duration
+            if timeline.loopEnd > runtime.session.maxDuration {
+                timeline.loopEnd = runtime.session.maxDuration
+                timeline.loopStart = max(0, timeline.loopEnd - 2.0)
+            }
+
+        } else {
         }
     }
 }

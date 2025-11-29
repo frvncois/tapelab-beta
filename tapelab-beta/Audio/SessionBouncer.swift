@@ -73,7 +73,6 @@ class SessionBouncer {
             throw BounceError.emptySession
         }
 
-        print("🎛️ Starting bounce: \(session.name), duration: \(totalDuration)s")
 
         // 2. Create offline rendering engine
         let engine = AVAudioEngine()
@@ -89,7 +88,6 @@ class SessionBouncer {
             throw BounceError.invalidAudioFormat
         }
 
-        print("🔍 Stereo format: \(stereoFormat)")
 
         // 4. CRITICAL: Enable manual rendering mode BEFORE attaching any nodes
         do {
@@ -98,9 +96,7 @@ class SessionBouncer {
                 format: stereoFormat,
                 maximumFrameCount: frameCapacity
             )
-            print("✅ Manual rendering enabled with format: \(engine.manualRenderingFormat)")
         } catch {
-            print("⚠️ Failed to enable manual rendering: \(error)")
             throw BounceError.engineConfigurationFailed
         }
 
@@ -110,34 +106,25 @@ class SessionBouncer {
         do {
             trackPlayers = try buildRenderingGraph(engine: engine, stereoFormat: stereoFormat)
         } catch {
-            print("⚠️ Failed to build rendering graph: \(error)")
             throw BounceError.engineConfigurationFailed
         }
 
         // 6. Start engine in manual rendering mode
         do {
             try engine.start()
-            print("✅ Engine started in manual rendering mode")
         } catch {
-            print("⚠️ Failed to start engine: \(error)")
             throw BounceError.engineConfigurationFailed
         }
 
         // 7. Preload and pre-render regions with effects
-        print("🎵 Preloading region buffers...")
         preloadRegions(sampleRate: stereoFormat.sampleRate)
-        print("✅ Preloaded \(regionBuffers.flatMap { $0.values }.count) region buffers")
 
-        print("🎵 Pre-rendering regions with effects...")
         preRenderAllRegions(sampleRate: stereoFormat.sampleRate)
-        print("✅ Pre-rendered \(preRenderedRegions.count) regions")
 
         // 8. NOW schedule pre-rendered buffers (engine is running in manual mode)
-        print("🎵 Scheduling regions for offline rendering...")
         for (track, player) in trackPlayers {
             schedulePreRenderedRegions(track: track, player: player, sampleRate: stereoFormat.sampleRate)
         }
-        print("✅ All regions scheduled for offline rendering")
 
         // 9. Write rendered audio - use explicit scope to ensure file closure
         var framesRendered: AVAudioFramePosition = 0
@@ -168,20 +155,10 @@ class SessionBouncer {
 
                 outputFile = try AVAudioFile(forWriting: outputURL, settings: settings)
 
-                print("🔍 Engine rendering format: \(engine.manualRenderingFormat)")
-                print("🔍 Target format: \(int16Format)")
-                print("🔍 Output file format: \(outputFile.fileFormat)")
-                print("🔍 Output file processing format: \(outputFile.processingFormat)")
 
                 // Verify file format details
-                let desc = outputFile.fileFormat.streamDescription.pointee
-                print("📋 File format verification:")
-                print("  - Format ID: \(desc.mFormatID == kAudioFormatLinearPCM ? "PCM" : "other")")
-                print("  - Bits per channel: \(desc.mBitsPerChannel)")
-                print("  - Is float: \(desc.mFormatFlags & kAudioFormatFlagIsFloat != 0)")
-                print("  - Is interleaved: \(desc.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0)")
+                let _ = outputFile.fileFormat.streamDescription.pointee
             } catch {
-                print("⚠️ Failed to create output file: \(error)")
                 throw BounceError.fileWriteFailed(error)
             }
 
@@ -195,9 +172,6 @@ class SessionBouncer {
 
             let writeFormat = outputFile.processingFormat
 
-            print("🔍 Render format: \(renderBuffer.format)")
-            print("🔍 Write format (processingFormat): \(writeFormat)")
-            print("🎯 AVAudioFile will convert \(writeFormat) → \(outputFile.fileFormat) on disk")
 
             // Check if we need format conversion
             let needsConversion = engine.manualRenderingFormat != writeFormat
@@ -206,15 +180,12 @@ class SessionBouncer {
             var convertBuffer: AVAudioPCMBuffer?
 
             if needsConversion {
-                print("⚠️ Format conversion needed")
                 converter = AVAudioConverter(from: engine.manualRenderingFormat, to: writeFormat)
                 convertBuffer = AVAudioPCMBuffer(
                     pcmFormat: writeFormat,
                     frameCapacity: engine.manualRenderingMaximumFrameCount
                 )
-                print("✅ Converter created: \(engine.manualRenderingFormat) → \(writeFormat)")
             } else {
-                print("✅ Formats match - no conversion needed")
             }
 
             framesRendered = 0
@@ -225,7 +196,6 @@ class SessionBouncer {
                 if isCancelled {
                     engine.stop()
                     try? FileManager.default.removeItem(at: outputURL)
-                    print("🛑 Bounce cancelled")
                     throw BounceError.renderingFailed(NSError(domain: "SessionBouncer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Cancelled by user"]))
                 }
 
@@ -236,11 +206,9 @@ class SessionBouncer {
                     let status = try engine.renderOffline(framesToRender, to: renderBuffer)
 
                     guard status == .success else {
-                        print("⚠️ Render failed with status: \(status)")
                         throw BounceError.renderingFailed(NSError(domain: "SessionBouncer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Render status: \(status)"]))
                     }
                 } catch {
-                    print("⚠️ Rendering error: \(error)")
                     throw BounceError.renderingFailed(error)
                 }
 
@@ -261,12 +229,10 @@ class SessionBouncer {
                         let conversionStatus = converter.convert(to: convertBuffer, error: &conversionError, withInputFrom: inputBlock)
 
                         if let conversionError = conversionError {
-                            print("⚠️ Conversion error: \(conversionError)")
                             throw BounceError.renderingFailed(conversionError)
                         }
 
                         guard conversionStatus != .error else {
-                            print("⚠️ Conversion failed with status: \(conversionStatus)")
                             throw BounceError.renderingFailed(NSError(domain: "SessionBouncer", code: -3, userInfo: [NSLocalizedDescriptionKey: "Conversion failed"]))
                         }
 
@@ -278,7 +244,6 @@ class SessionBouncer {
                         try outputFile.write(from: renderBuffer)
                     }
                 } catch {
-                    print("⚠️ Write error: \(error)")
                     throw BounceError.fileWriteFailed(error)
                 }
 
@@ -294,8 +259,6 @@ class SessionBouncer {
                 progressHandler(progress)
             }
 
-            print("✅ Bounce complete: \(framesRendered) frames rendered")
-            print("💾 Closing output file and flushing buffers to disk...")
 
         } // CRITICAL: outputFile goes out of scope here, forcing file closure and buffer flush
 
@@ -309,7 +272,6 @@ class SessionBouncer {
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
             let fileSize = attributes[.size] as? Int ?? 0
-            print("📊 Output file size: \(fileSize) bytes")
 
             guard fileSize > 0 else {
                 throw BounceError.fileWriteFailed(NSError(
@@ -322,23 +284,14 @@ class SessionBouncer {
             // Try to read the file header
             let data = try Data(contentsOf: outputURL)
             let header = String(data: data.prefix(4), encoding: .ascii) ?? ""
-            print("📊 File header: '\(header)'")
 
             if header != "RIFF" {
-                print("⚠️ WARNING: File header is '\(header)', expected 'RIFF'")
-                print("   This may not be a valid WAV file!")
             }
 
             // Try to load with AVAudioFile to verify
-            let verifyFile = try AVAudioFile(forReading: outputURL)
-            print("✅ File verified with AVAudioFile:")
-            print("   Frames: \(verifyFile.length)")
-            print("   Sample rate: \(verifyFile.fileFormat.sampleRate)Hz")
-            print("   Channels: \(verifyFile.fileFormat.channelCount)")
-            print("   Format: \(verifyFile.fileFormat)")
+            let _ = try AVAudioFile(forReading: outputURL)
 
         } catch {
-            print("⚠️ File verification failed: \(error)")
             throw BounceError.fileWriteFailed(error)
         }
 
@@ -401,7 +354,6 @@ class SessionBouncer {
         engine.connect(mainMixer, to: limiter, format: stereoFormat)
         engine.connect(limiter, to: engine.mainMixerNode, format: stereoFormat)
 
-        print("✅ Graph: mainMixer → limiter → output (stereo)")
 
         var trackPlayers: [(track: Track, player: AVAudioPlayerNode)] = []
 
@@ -439,7 +391,7 @@ class SessionBouncer {
         return trackPlayers
     }
 
-    /// Creates an audio processing bus for a single track
+    /// Creates an audio processing bus for a single track with full FX chain
     private func createTrackBus(
         engine: AVAudioEngine,
         track: Track,
@@ -447,10 +399,20 @@ class SessionBouncer {
         stereoFormat: AVAudioFormat
     ) throws -> (player: AVAudioPlayerNode, mixer: AVAudioMixerNode) {
 
+        // Create full FX chain: Player → EQ → Delay → Reverb → Distortion → Mixer
         let player = AVAudioPlayerNode()
+        let eq = AVAudioUnitEQ(numberOfBands: 4)
+        let delay = AVAudioUnitDelay()
+        let reverb = AVAudioUnitReverb()
+        let dist = AVAudioUnitDistortion()
         let mixer = AVAudioMixerNode()
 
+        // Attach all nodes
         engine.attach(player)
+        engine.attach(eq)
+        engine.attach(delay)
+        engine.attach(reverb)
+        engine.attach(dist)
         engine.attach(mixer)
 
         // Mono processing format for audio files
@@ -461,23 +423,73 @@ class SessionBouncer {
             throw BounceError.invalidAudioFormat
         }
 
-        // Connect player (mono) to mixer in mono format
-        engine.connect(player, to: mixer, format: monoFormat)
+        // Connect full signal chain: Player → EQ → Delay → Reverb → Dist → Mixer
+        engine.connect(player, to: eq, format: monoFormat)
+        engine.connect(eq, to: delay, format: monoFormat)
+        engine.connect(delay, to: reverb, format: monoFormat)
+        engine.connect(reverb, to: dist, format: monoFormat)
+        engine.connect(dist, to: mixer, format: monoFormat)
 
-        // Apply track volume and pan
-        mixer.volume = pow(10, Float(track.fx.volumeDB) / 20.0)
-        mixer.pan = Float(track.fx.pan)
-
-        print("✅ Track \(trackIndex + 1): player(mono) → mixer(mono), vol=\(track.fx.volumeDB)dB, pan=\(track.fx.pan)")
+        // Apply FX settings from track
+        applyFXToNodes(track: track, eq: eq, delay: delay, reverb: reverb, dist: dist, mixer: mixer)
 
         return (player, mixer)
+    }
+
+    /// Apply FX settings to audio nodes (same logic as TrackBus.applyFX)
+    private func applyFXToNodes(
+        track: Track,
+        eq: AVAudioUnitEQ,
+        delay: AVAudioUnitDelay,
+        reverb: AVAudioUnitReverb,
+        dist: AVAudioUnitDistortion,
+        mixer: AVAudioMixerNode
+    ) {
+        let fx = track.fx
+
+        // Volume / Pan
+        let linearGain = pow(10.0, fx.volumeDB / 20.0)
+        mixer.outputVolume = Float(linearGain)
+        mixer.pan = fx.pan
+
+        // EQ
+        for (i, model) in fx.eqBands.enumerated() {
+            guard i < eq.bands.count else { break }
+            let band = eq.bands[i]
+            band.bypass = false
+            band.filterType = .parametric
+            band.frequency = Float(model.frequency)
+            band.gain = Float(model.gainDB)
+            band.bandwidth = Float(model.q)
+        }
+        // Bypass remaining bands
+        if fx.eqBands.count < eq.bands.count {
+            for j in fx.eqBands.count..<eq.bands.count {
+                eq.bands[j].bypass = true
+            }
+        }
+        eq.bypass = fx.eqBands.isEmpty
+
+        // Reverb
+        reverb.wetDryMix = fx.reverb.wetMix
+        reverb.loadFactoryPreset(fx.reverb.roomSize ? .largeHall : .smallRoom)
+
+        // Delay
+        delay.wetDryMix = fx.delay.wetMix
+        delay.delayTime = fx.delay.time
+        delay.feedback = fx.delay.feedback
+        delay.lowPassCutoff = fx.delay.lowPassCutoff
+
+        // Saturation/Distortion
+        dist.loadFactoryPreset(.multiBrokenSpeaker)
+        dist.wetDryMix = fx.saturation.wetMix
+        dist.preGain = fx.saturation.preGain
     }
 
     /// Schedules pre-rendered regions for OFFLINE rendering
     private func schedulePreRenderedRegions(track: Track, player: AVAudioPlayerNode, sampleRate: Double) {
 
         guard let trackIndex = session.tracks.firstIndex(where: { $0.id == track.id }) else {
-            print("   ⚠️ Could not find track index")
             return
         }
 
@@ -485,7 +497,6 @@ class SessionBouncer {
             // Get the pre-rendered buffer (already has all effects applied!)
             let regionKey = "\(trackIndex)-\(region.id.id)"
             guard let preRenderedBuffer = preRenderedRegions[regionKey] else {
-                print("   ⚠️ No pre-rendered buffer for region \(region.id.id)")
                 continue
             }
 
@@ -496,13 +507,11 @@ class SessionBouncer {
             // Schedule the pre-rendered buffer (not the raw file!)
             player.scheduleBuffer(preRenderedBuffer, at: scheduledTime, options: [], completionHandler: nil)
 
-            print("   📍 Scheduled PRE-RENDERED: \(region.sourceURL.lastPathComponent) at \(String(format: "%.2f", region.startTime))s, \(preRenderedBuffer.frameLength) frames")
         }
 
         // CRITICAL: START THE PLAYER NODE!
         // Without this, offline rendering won't pull any audio from scheduled buffers
         player.play()
-        print("   ✅ Track ready (\(track.regions.count) pre-rendered regions scheduled) - PLAYER STARTED")
     }
 
     /// Applies gain in dB to a buffer
@@ -513,7 +522,7 @@ class SessionBouncer {
         let frameCount = Int(buffer.frameLength)
 
         for channel in 0..<Int(buffer.format.channelCount) {
-            var data = channelData[channel]
+            let data = channelData[channel]
             for frame in 0..<frameCount {
                 data[frame] *= linearGain
             }
@@ -527,16 +536,13 @@ class SessionBouncer {
         regionBuffers = Array(repeating: [:], count: session.tracks.count)
 
         for (i, track) in session.tracks.enumerated() {
-            print("   🎚️ Track \(i + 1): \(track.regions.count) regions to load")
             for region in track.regions {
-                print("      📁 Loading: \(region.sourceURL.lastPathComponent)")
                 do {
                     let file = try AVAudioFile(forReading: region.sourceURL)
                     let sr = file.processingFormat.sampleRate
                     let startFrame = AVAudioFramePosition(region.fileStartOffset * sr)
                     let frames = AVAudioFrameCount(region.duration * sr)
                     guard frames > 0 else {
-                        print("      ⚠️ Skipped (0 frames)")
                         continue
                     }
                     file.framePosition = startFrame
@@ -546,10 +552,8 @@ class SessionBouncer {
                     buf.frameLength = frames
                     if let mono = convertToMonoIfNeeded(buffer: buf, targetSampleRate: sampleRate) {
                         regionBuffers[i][region.id.id] = mono
-                        print("      ✅ Loaded: \(mono.frameLength) frames")
                     }
                 } catch {
-                    print("      ⚠️ Preload failed: \(error)")
                 }
             }
         }
@@ -563,7 +567,6 @@ class SessionBouncer {
             for region in track.regions {
                 // Get source buffer (already loaded in preloadRegions)
                 guard let sourceBuffer = regionBuffers[tIndex][region.id.id] else {
-                    print("      ⚠️ No buffer for region \(region.id.id)")
                     continue
                 }
 
@@ -580,7 +583,6 @@ class SessionBouncer {
                 ) {
                     let key = "\(tIndex)-\(region.id.id)"
                     preRenderedRegions[key] = renderedRegion
-                    print("      ✅ Pre-rendered: \(region.sourceURL.lastPathComponent), \(renderedRegion.frameLength) frames")
                 }
             }
         }

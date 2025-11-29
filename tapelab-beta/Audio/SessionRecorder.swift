@@ -9,7 +9,7 @@ import Combine
 import QuartzCore
 
 // Debug logging flag - set to false for production
-private let enableDebugLogs = false
+private let enableDebugLogs = true
 
 enum RecordingError: LocalizedError {
     case diskSpaceCheckFailed
@@ -28,6 +28,7 @@ enum RecordingError: LocalizedError {
     }
 }
 
+@MainActor
 public final class SessionRecorder: ObservableObject {
     weak var engineController: AudioEngineController?
     @Published var inputLevel: Float = 0
@@ -50,6 +51,8 @@ public final class SessionRecorder: ObservableObject {
     private var isRecording = false
     private var monitorMixer: AVAudioMixerNode?
     private var recordingStartPlayhead: TimeInterval = 0  // Playhead when recording started
+    private var recordingOutputLatency: TimeInterval = 0  // Output latency for overdub compensation
+    private var wasOverdubbing: Bool = false              // True if playback was active when recording started
     private var currentRecordingRegionID: RegionID?  // Track the region being recorded
     private(set) var currentRecordingTrackIndex: Int?  // Track index being recorded (internal access for emergency stop)
 
@@ -75,7 +78,6 @@ public final class SessionRecorder: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self = self,
                   let engine = self.engineController?.engine else {
-                print("⚠️ Cannot start monitoring: engine not available")
                 return
             }
 
@@ -83,9 +85,7 @@ public final class SessionRecorder: ObservableObject {
             if !engine.isRunning {
                 do {
                     try engine.start()
-                    print("🎚️ Started engine for monitoring")
                 } catch {
-                    print("⚠️ Failed to start engine for monitoring: \(error)")
                     return
                 }
             }
@@ -93,13 +93,17 @@ public final class SessionRecorder: ObservableObject {
             let input = engine.inputNode
             let inputFormat = input.outputFormat(forBus: 0)
 
-            // Install a tap just for metering (small buffer for fast updates)
-            input.installTap(onBus: 0, bufferSize: 256, format: inputFormat) { [weak self] (buffer: AVAudioPCMBuffer, time: AVAudioTime) in
+            // Install a tap just for metering and tuner
+            // Use 4096 frames (~85ms @ 48kHz) for good balance between update rate and pitch accuracy
+            var tapCallCount = 0
+            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] (buffer: AVAudioPCMBuffer, time: AVAudioTime) in
                 guard let self = self,
                       let channelData = buffer.floatChannelData else { return }
 
+                tapCallCount += 1
+
                 let frameCount = Int(buffer.frameLength)
-                let samples = UnsafeBufferPointer(start: channelData[0], count: frameCount)
+                let samples = Array(UnsafeBufferPointer(start: channelData[0], count: frameCount))
 
                 // Calculate RMS level
                 var sum: Float = 0
@@ -108,58 +112,58 @@ public final class SessionRecorder: ObservableObject {
                 }
                 let rms = sqrtf(sum / Float(frameCount))
 
-                // Update on main thread
-                DispatchQueue.main.async {
+                // Update input level on main thread
+                Task { @MainActor in
                     self.inputLevel = rms
-                    self.objectWillChange.send()
                 }
             }
 
             self.meterTapInstalled = true
-            print("🎚️ Continuous input level monitoring started (engine running: \(engine.isRunning))")
         }
     }
 
-    /// Trim latency frames from the start of an audio file
-    /// Returns the URL of the trimmed file
-    private func trimLatencyFromFile(sourceURL: URL, latencyFrames: Int64, format: AVAudioFormat) throws -> URL {
-        // If latency is negligible, skip trimming
-        guard latencyFrames > 0 else {
-            if enableDebugLogs {
-                print("⚠️ Latency is 0 frames, skipping trim")
-            }
-            return sourceURL
+    /// Measure output latency for overdub alignment compensation
+    private func measureOutputLatency() -> TimeInterval {
+        let audioSession = AVAudioSession.sharedInstance()
+
+        let inputLatency = audioSession.inputLatency
+        let outputLatency = audioSession.outputLatency
+        let bufferDuration = audioSession.ioBufferDuration
+
+        if enableDebugLogs {
+            print("🎙️ Latency - input: \(inputLatency * 1000)ms, output: \(outputLatency * 1000)ms, buffer: \(bufferDuration * 1000)ms")
         }
 
-        // Read source file
+        return outputLatency
+    }
+
+    /// Trim frames from the start of an audio file for latency compensation
+    /// Used when overdubbing at 0:00 where we can't shift to negative time
+    private func trimAudioFile(sourceURL: URL, trimSeconds: TimeInterval, format: AVAudioFormat) throws -> (url: URL, duration: TimeInterval) {
         let sourceFile = try AVAudioFile(forReading: sourceURL)
+        let sampleRate = format.sampleRate
+        let trimFrames = Int64(trimSeconds * sampleRate)
         let totalFrames = sourceFile.length
 
-        // If latency is longer than the file, return empty file or error
-        guard latencyFrames < totalFrames else {
-            if enableDebugLogs {
-                print("⚠️ Latency (\(latencyFrames) frames) >= file length (\(totalFrames) frames), keeping original")
-            }
-            return sourceURL
+        // If trim is longer than file, return minimal file
+        guard trimFrames < totalFrames else {
+            print("🎙️ Warning: trim (\(trimSeconds)s) exceeds file length")
+            return (sourceURL, 0)
         }
 
-        // Calculate trimmed length
-        let trimmedFrames = totalFrames - latencyFrames
-        if enableDebugLogs {
-            print("✂️ Trimming: removing \(latencyFrames) frames, keeping \(trimmedFrames) frames")
-        }
+        let trimmedFrames = totalFrames - trimFrames
+        let trimmedDuration = Double(trimmedFrames) / sampleRate
 
-        // Create trimmed file URL (replace original)
+        // Create trimmed file
         let trimmedURL = sourceURL.deletingLastPathComponent()
             .appendingPathComponent("trimmed_\(sourceURL.lastPathComponent)")
 
-        // Create output file
         let outputFile = try AVAudioFile(forWriting: trimmedURL, settings: format.settings)
 
-        // Read from source starting at latency offset
-        sourceFile.framePosition = latencyFrames
+        // Seek past the trim portion
+        sourceFile.framePosition = trimFrames
 
-        // Read and write in chunks
+        // Copy remaining audio in chunks
         let bufferSize: AVAudioFrameCount = 4096
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufferSize)!
 
@@ -171,52 +175,18 @@ public final class SessionRecorder: ObservableObject {
             framesRemaining -= Int64(buffer.frameLength)
         }
 
-        // Delete original file
+        // Replace original with trimmed file
         try FileManager.default.removeItem(at: sourceURL)
-        if enableDebugLogs {
-            print("🗑️ Deleted original file: \(sourceURL.lastPathComponent)")
-        }
+        try FileManager.default.moveItem(at: trimmedURL, to: sourceURL)
 
-        // Rename trimmed file to original name
-        let finalURL = sourceURL
-        try FileManager.default.moveItem(at: trimmedURL, to: finalURL)
-        if enableDebugLogs {
-            print("✅ Renamed trimmed file to: \(finalURL.lastPathComponent)")
-        }
+        print("🎙️ Trimmed \(trimSeconds * 1000)ms from start of audio file")
 
-        return finalURL
-    }
-
-    /// Measure the round-trip audio latency for latency compensation
-    private func measureLatency() -> TimeInterval {
-        let audioSession = AVAudioSession.sharedInstance()
-
-        // Input latency: Time for audio to travel from mic to audio engine
-        let inputLatency = audioSession.inputLatency
-
-        // Output latency: Time for audio to travel from engine to speakers/headphones
-        let outputLatency = audioSession.outputLatency
-
-        // Buffer latency: Time spent in processing buffers
-        let bufferDuration = audioSession.ioBufferDuration
-
-        // Total round-trip latency (what user hears vs what gets recorded)
-        let totalLatency = inputLatency + outputLatency + bufferDuration
-
-        if enableDebugLogs {
-            print("🔊 Latency measurements:")
-            print("   - Input latency: \(String(format: "%.1f", inputLatency * 1000))ms")
-            print("   - Output latency: \(String(format: "%.1f", outputLatency * 1000))ms")
-            print("   - Buffer duration: \(String(format: "%.1f", bufferDuration * 1000))ms")
-            print("   - Total round-trip: \(String(format: "%.1f", totalLatency * 1000))ms")
-        }
-
-        return totalLatency
+        return (sourceURL, trimmedDuration)
     }
 
     /// Check if sufficient disk space available for recording
     /// Requires at least 100MB free space
-    private func checkDiskSpace() throws {
+    nonisolated private func checkDiskSpace() throws {
         guard let documentsPath = FileManager.default.urls(
             for: .documentDirectory,
             in: .userDomainMask
@@ -227,7 +197,6 @@ public final class SessionRecorder: ObservableObject {
         do {
             let values = try documentsPath.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             guard let capacity = values.volumeAvailableCapacityForImportantUsage else {
-                print("⚠️ Could not determine disk space")
                 return // Don't block recording on check failure
             }
 
@@ -235,21 +204,18 @@ public final class SessionRecorder: ObservableObject {
             let availableMB = capacity / 1_048_576
 
             if capacity < requiredBytes {
-                print("⚠️ Insufficient disk space: \(availableMB)MB available, need 100MB")
                 throw RecordingError.insufficientDiskSpace(availableMB: availableMB)
             }
 
-            print("✅ Disk space check: \(availableMB)MB available")
         } catch let error as RecordingError {
             throw error
         } catch {
-            print("⚠️ Disk space check error: \(error)")
             // Don't block recording on check failure
         }
     }
 
-    func startRecording(session: Session, timeline: TimelineState, trackIndex: Int) async throws -> Session {
-        var mutableSession = session
+    func startRecording(session: Session, timeline: TimelineState, trackIndex: Int, needsLatencyCompensation: Bool) async throws -> Session {
+        let mutableSession = session
 
         // CHECK DISK SPACE FIRST
         try checkDiskSpace()
@@ -262,14 +228,12 @@ public final class SessionRecorder: ObservableObject {
         if meterTapInstalled {
             input.removeTap(onBus: 0)
             meterTapInstalled = false
-            print("🔍 Removed continuous monitoring tap")
         }
 
         // CRITICAL: Disconnect input mixer before installing tap
         // The input mixer connection may interfere with tap callbacks on Bluetooth devices
         if let inputMixer = engineController?.inputMixer {
             engine.disconnectNodeInput(inputMixer)
-            print("🔍 Disconnected input mixer before tap installation")
         }
 
         // Ensure engine is running
@@ -277,29 +241,40 @@ public final class SessionRecorder: ObservableObject {
 
         let inputFormat = input.outputFormat(forBus: 0)
 
-        print("🔍 Input node format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) ch")
 
         guard inputFormat.sampleRate > 0 else {
             throw NSError(domain: "TapelabRecorder", code: -1,
                          userInfo: [NSLocalizedDescriptionKey: "Audio input not available - format shows \(inputFormat.sampleRate)Hz"])
         }
 
-        print("🔍 Recording with format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) ch")
         
+        // CRITICAL: Capture playhead position NOW, before installing tap
+        // The audio file will contain audio starting from this moment, not from when
+        // the first buffer callback fires (which can be 100-150ms later)
+        recordingStartPlayhead = timeline.playhead
+
+        // Detect if we need output latency compensation
+        // This is true when overdubbing (recording over existing audio on other tracks)
+        // The user plays along with playback, which is delayed by output latency
+        wasOverdubbing = needsLatencyCompensation
+
+        // Capture output latency NOW at recording start (for overdub compensation)
+        // AVAudioSession latency values can change during recording (especially with Bluetooth)
+        recordingOutputLatency = measureOutputLatency()
+        print("🎙️ Recording starting - playhead: \(recordingStartPlayhead)s, overdubbing: \(wasOverdubbing), outputLatency: \(recordingOutputLatency * 1000)ms")
+
         // Create recording file
         let fileURL = FileStore.newRegionURL(session: mutableSession, track: trackIndex)
         let file = try AVAudioFile(forWriting: fileURL, settings: inputFormat.settings)
         recordingFile = file
         isRecording = true
         recordingDuration = 0
-        recordingStartPlayhead = -1  // Will be set when first buffer arrives
 
         // Create recording metadata for UI (no session modification)
         let recordingRegionID = RegionID()
         currentRecordingRegionID = recordingRegionID
         currentRecordingTrackIndex = trackIndex
 
-        print("🎬 Recording armed, waiting for first audio buffer...")
 
         // Detect if output is Bluetooth (which forces input buffers to match for sync)
         let audioSession = AVAudioSession.sharedInstance()
@@ -312,10 +287,8 @@ public final class SessionRecorder: ObservableObject {
         // Match buffer size to iOS's actual behavior based on output route
         // Bluetooth forces large buffers even for built-in mic input
         let bufferSize: AVAudioFrameCount = isBluetoothOutput ? 4800 : 512
-        let expectedCallbackMs = Double(bufferSize) / inputFormat.sampleRate * 1000
+        let _ = Double(bufferSize) / inputFormat.sampleRate * 1000
 
-        print("🔍 Output route: \(isBluetoothOutput ? "Bluetooth" : "Wired/Built-in")")
-        print("🔍 Requesting \(bufferSize) frame buffers (~\(String(format: "%.1f", expectedCallbackMs))ms per callback)")
 
         var tapCallCount = 0
         var lastTapTime = CACurrentMediaTime()
@@ -327,7 +300,6 @@ public final class SessionRecorder: ObservableObject {
             // Detect when iOS changes buffer size on us (common with Bluetooth)
             if buffer.frameLength != lastBufferSize {
                 if lastBufferSize > 0 {
-                    print("⚠️ BUFFER SIZE CHANGED: \(lastBufferSize) → \(buffer.frameLength) frames")
                 }
                 lastBufferSize = buffer.frameLength
             }
@@ -343,31 +315,25 @@ public final class SessionRecorder: ObservableObject {
             let warningThreshold = expectedInterval * 2.0
 
             if tapCallCount > 1 && timeSinceLastTap > warningThreshold {
-                print("⚠️ TAP CALLBACK GAP DETECTED: \(String(format: "%.1f", timeSinceLastTap * 1000))ms since last callback (expected ~11ms)")
             }
 
             // Log first few callbacks with detailed info
             // Log first few callbacks with detailed info
             if tapCallCount <= 5 {
                 let expectedMs = (Double(buffer.frameLength) / buffer.format.sampleRate) * 1000
-                let status = abs(timeSinceLastTap * 1000 - expectedMs) < 10 ? "✅" : "⚠️"
-                print("\(status) Tap callback #\(tapCallCount): \(buffer.frameLength) frames (~\(String(format: "%.1f", expectedMs))ms expected), actual: \(String(format: "%.1f", timeSinceLastTap * 1000))ms")
+                let _ = abs(timeSinceLastTap * 1000 - expectedMs) < 10 ? "✅" : "⚠️"
             }
 
             // Log every 100th callback after initial 5 to monitor long-term stability
             if tapCallCount > 5 && tapCallCount % 100 == 0 {
-                print("🔍 Tap callback #\(tapCallCount): \(buffer.frameLength) frames, interval: \(String(format: "%.1f", timeSinceLastTap * 1000))ms")
             }
 
             guard let self, let file = self.recordingFile else { return }
 
-            // CRITICAL: Capture playhead position when FIRST buffer arrives
-            // This is the actual recording start time
-            if self.recordingStartPlayhead < 0 {
-                self.recordingStartPlayhead = timeline.playhead
-                print("🎬 First buffer arrived! Recording started at: \(String(format: "%.3f", self.recordingStartPlayhead))s")
+            // Initialize activeRecording state for UI on first buffer (NO session access)
+            if tapCallCount == 1 {
+                print("🎙️ First buffer arrived - recordingStartPlayhead: \(self.recordingStartPlayhead)s")
 
-                // Initialize activeRecording state for UI (NO session access)
                 if let regionID = self.currentRecordingRegionID,
                    let trackIdx = self.currentRecordingTrackIndex {
                     Task { @MainActor in
@@ -401,7 +367,6 @@ public final class SessionRecorder: ObservableObject {
                         do {
                             try self.checkDiskSpace()
                         } catch {
-                            print("⚠️ Disk full during recording: \(error.localizedDescription)")
                             // Stop recording on main thread
                             DispatchQueue.main.async {
                                 // Trigger emergency stop
@@ -416,29 +381,27 @@ public final class SessionRecorder: ObservableObject {
 
                     // Reduce logging frequency to avoid console spam
                     if tapCallCount <= 100 || tapCallCount % 100 == 0 {
-                        print("🎤 Buffer: \(buffer.frameLength) frames, Level: \(String(format: "%.3f", level)), File: \(frames) frames")
                     }
 
                     // Update UI state on main thread (NO session access)
-                    DispatchQueue.main.async {
+                    // Use MainActor.run for better timing precision than DispatchQueue.main.async
+                    Task { @MainActor in
                         self.recordingDuration = currentDuration
+
+                        // Update input level for meter display during recording
+                        self.inputLevel = level
 
                         // Update activeRecording duration for UI
                         if self.activeRecording?.regionID == self.currentRecordingRegionID {
                             self.activeRecording?.duration = currentDuration
                         }
-
-                        // Explicitly trigger objectWillChange for immediate UI update
-                        self.objectWillChange.send()
                     }
                 } catch {
-                    print("⚠️ Error writing buffer: \(error)")
                     // TODO: Add error handling in Phase 2
                 }
             }
         }
 
-        print("✅ Tap installed successfully")
 
         // Update timeline state to show recording in UI - must be on main thread
         await MainActor.run {
@@ -450,10 +413,8 @@ public final class SessionRecorder: ObservableObject {
                 timeline.startTimelineForRecording()
             }
 
-            print("🔍 Timeline isRecording set to: \(timeline.isRecording)")
         }
 
-        print("🎙️ Recording started on track \(trackIndex + 1)")
 
         return mutableSession
     }
@@ -464,14 +425,12 @@ public final class SessionRecorder: ObservableObject {
         // Remove tap
         if let engine = engineController?.engine {
             engine.inputNode.removeTap(onBus: 0)
-            print("🔍 Input tap removed")
 
             // CRITICAL: Reconnect input mixer after tap is removed
             // This keeps the input node initialized for future recordings
             if let inputMixer = engineController?.inputMixer {
                 engine.connect(engine.inputNode, to: inputMixer, format: nil)
                 inputMixer.outputVolume = 0
-                print("🔍 Reconnected input mixer (volume=0)")
             }
 
             // Restart continuous monitoring tap
@@ -496,71 +455,82 @@ public final class SessionRecorder: ObservableObject {
             timeline.stopTimeline()
         }
 
-        // Measure latency BEFORE processing file
-        let url = file.url
-        let latency = measureLatency()
         let sampleRate = file.processingFormat.sampleRate
-        let latencyFrames = Int64(latency * sampleRate)
+        var fileDuration = Double(file.length) / sampleRate
+        var sourceURL = file.url
 
-        print("📊 Original recorded file stats:")
-        print("   - Path: \(url.lastPathComponent)")
-        print("   - Frames: \(file.length)")
-        print("   - Duration: \(String(format: "%.2f", Double(file.length) / sampleRate))s")
-        print("   - Sample Rate: \(sampleRate)Hz")
-        print("   - Latency to remove: \(String(format: "%.3f", latency))s (\(latencyFrames) frames)")
+        // LATENCY COMPENSATION LOGIC:
+        //
+        // Case 1: First recording (no playback active) - wasOverdubbing = false
+        //   - No compensation needed
+        //   - The recorded audio aligns with the playhead position when recording started
+        //   - Region starts at recordingStartPlayhead
+        //
+        // Case 2: Overdubbing (recording while playing back) - wasOverdubbing = true
+        //   - Need to compensate for OUTPUT latency
+        //   - When playhead shows position X, the audio coming out of headphones
+        //     is actually from position (X - outputLatency) due to buffering/processing
+        //   - User plays along with what they HEAR (which is delayed)
+        //   - So their performance corresponds to earlier audio
+        //   - We shift the recording EARLIER by outputLatency to align
+        //
+        // Case 2b: Overdubbing near 0:00 (compensated time would be negative)
+        //   - We can't place a region at negative time
+        //   - Instead, TRIM the audio file to remove the latency portion
+        //   - This aligns the audio content with timeline position 0:00
 
-        // Trim latency from the start of the audio file
-        do {
-            let trimmedURL = try trimLatencyFromFile(sourceURL: file.url,
-                                                       latencyFrames: latencyFrames,
-                                                       format: file.processingFormat)
+        let latencyCompensation = wasOverdubbing ? recordingOutputLatency : 0
+        let compensatedStartTime = recordingStartPlayhead - latencyCompensation
 
-            // Read trimmed file stats
-            let trimmedFile = try AVAudioFile(forReading: trimmedURL)
-            let trimmedDuration = Double(trimmedFile.length) / sampleRate
-            let fileSize = (try? FileManager.default.attributesOfItem(atPath: trimmedURL.path)[.size] as? Int64) ?? 0
+        print("🎙️ Recording stopped - file: \(fileDuration)s, overdub: \(wasOverdubbing), compensation: \(latencyCompensation * 1000)ms")
+        print("🎙️ Start time: \(recordingStartPlayhead)s -> compensated: \(compensatedStartTime)s")
 
-            print("📊 Trimmed file stats:")
-            print("   - Path: \(trimmedURL.lastPathComponent)")
-            print("   - Frames: \(trimmedFile.length)")
-            print("   - Duration: \(String(format: "%.2f", trimmedDuration))s")
-            print("   - File Size: \(fileSize) bytes")
+        let actualStartTime: TimeInterval
+        let fileStartOffset: TimeInterval
+        let playableDuration: TimeInterval
 
-            // CRITICAL: Move the region backward by the amount we trimmed
-            // If we trimmed 170ms from the start, the audio now starts 170ms earlier
-            let compensatedStartTime = max(0, recordingStartPlayhead - latency)
+        if compensatedStartTime < 0 {
+            // Case 2b: Overdub near 0:00 - trim the audio file
+            let trimAmount = -compensatedStartTime  // How much to trim (positive value)
 
-            print("🎯 Timeline position compensation:")
-            print("   - Recording started at: \(String(format: "%.3f", recordingStartPlayhead))s")
-            print("   - Trimmed amount: \(String(format: "%.3f", latency))s")
-            print("   - New start position: \(String(format: "%.3f", compensatedStartTime))s")
+            do {
+                let (trimmedURL, trimmedDuration) = try trimAudioFile(
+                    sourceURL: sourceURL,
+                    trimSeconds: trimAmount,
+                    format: file.processingFormat
+                )
+                sourceURL = trimmedURL
+                fileDuration = trimmedDuration
+                actualStartTime = 0
+                fileStartOffset = 0
+                playableDuration = trimmedDuration
 
-            let region = Region(
-                sourceURL: trimmedURL,
-                startTime: compensatedStartTime,  // Move backward by trimmed amount
-                duration: trimmedDuration,
-                fileStartOffset: 0,
-                fileDuration: trimmedDuration
-            )
-            session.tracks[trackIndex].regions.append(region)
-
-            print("✅ Trimmed region saved to session: \(trimmedURL.lastPathComponent)")
-        } catch {
-            print("⚠️ Failed to trim audio file: \(error)")
-            print("⚠️ Using original file without trimming")
-
-            // Fallback: use original file without trimming
-            let originalDuration = Double(file.length) / sampleRate
-            let region = Region(
-                sourceURL: file.url,
-                startTime: recordingStartPlayhead,
-                duration: originalDuration,
-                fileStartOffset: 0,
-                fileDuration: originalDuration
-            )
-            session.tracks[trackIndex].regions.append(region)
-            print("✅ Original (untrimmed) region saved to session: \(file.url.lastPathComponent)")
+                print("🎙️ Trimmed \(trimAmount * 1000)ms for 0:00 alignment")
+            } catch {
+                print("🎙️ Error trimming file: \(error), using original")
+                // Fallback: use fileStartOffset approach
+                actualStartTime = 0
+                fileStartOffset = -compensatedStartTime
+                playableDuration = fileDuration - fileStartOffset
+            }
+        } else {
+            // Normal case: shift region earlier (or no shift for non-overdub)
+            actualStartTime = compensatedStartTime
+            fileStartOffset = 0
+            playableDuration = fileDuration
         }
+
+        // Create region with latency-compensated positioning
+        let region = Region(
+            sourceURL: sourceURL,
+            startTime: actualStartTime,
+            duration: playableDuration,
+            fileStartOffset: fileStartOffset,
+            fileDuration: fileDuration
+        )
+        session.tracks[trackIndex].regions.append(region)
+
+        print("🎙️ Region created on track \(trackIndex + 1): startTime=\(actualStartTime)s, duration=\(playableDuration)s, fileStartOffset=\(fileStartOffset)s")
     }
     
     // MARK: - Input Monitoring
@@ -570,11 +540,9 @@ public final class SessionRecorder: ObservableObject {
         // Don't assume format - get it directly from the node
         let actualInputFormat = input.outputFormat(forBus: 0)
 
-        print("🔍 Setting up monitoring: \(actualInputFormat.sampleRate)Hz, \(actualInputFormat.channelCount) channels")
 
         // Clean up any existing monitoring setup first
         if let existingMonitor = monitorMixer {
-            print("🔍 Cleaning up existing monitor mixer")
             engine.disconnectNodeInput(existingMonitor)
             engine.disconnectNodeOutput(existingMonitor)
             engine.detach(existingMonitor)
@@ -595,7 +563,6 @@ public final class SessionRecorder: ObservableObject {
         // Set monitoring volume
         monitor.outputVolume = monitorVolume
 
-        print("✅ Input monitoring connected")
     }
     
     /// Adjust input monitoring volume (0.0 = muted, 1.0 = full volume)

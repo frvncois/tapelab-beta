@@ -22,7 +22,6 @@ struct PlayerView: View {
 
     var body: some View {
         ZStack {
-            // Blurred background image
             if let coverImage = coverImage {
                 Image(uiImage: coverImage)
                     .resizable()
@@ -30,7 +29,6 @@ struct PlayerView: View {
                     .ignoresSafeArea()
                     .blur(radius: 50)
                     .overlay(
-                        // Gradient overlay for darker bottom
                         LinearGradient(
                             gradient: Gradient(stops: [
                                 .init(color: Color.black.opacity(0.3), location: 0.0),
@@ -45,21 +43,17 @@ struct PlayerView: View {
                     )
                     .allowsHitTesting(false)
             } else {
-                // Fallback solid background if no cover
                 Color.tapelabBlack
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
 
             VStack(spacing: 0) {
-                // Header
                 header
 
-                // Player content
                 VStack(spacing: 32) {
                     Spacer()
 
-                    // Square cover image centered with swipe gesture
                     ZStack {
                         if let coverImage = coverImage {
                             Image(uiImage: coverImage)
@@ -89,10 +83,8 @@ struct PlayerView: View {
                             .onEnded { value in
                                 let threshold: CGFloat = 100
                                 if value.translation.width > threshold {
-                                    // Swipe right - previous mix
                                     navigateToPreviousMix()
                                 } else if value.translation.width < -threshold {
-                                    // Swipe left - next mix
                                     navigateToNextMix()
                                 }
                                 withAnimation(.spring()) {
@@ -125,16 +117,20 @@ struct PlayerView: View {
                             .padding(.horizontal, 40)
 
                             // Time labels
-                            HStack {
+                            HStack(spacing: 8) {
                                 Text(formatTime(player.currentTime))
                                     .font(.tapelabMonoSmall)
                                     .foregroundColor(.white)
+                                    .monospacedDigit()
+                                    .frame(width: 60, alignment: .leading)
 
                                 Spacer()
 
                                 Text(formatTime(currentMix.duration))
                                     .font(.tapelabMonoSmall)
                                     .foregroundColor(.white.opacity(0.6))
+                                    .monospacedDigit()
+                                    .frame(width: 60, alignment: .trailing)
                             }
                             .padding(.horizontal, 40)
                         }
@@ -185,7 +181,6 @@ struct PlayerView: View {
             loadCurrentMix()
         }
         .onDisappear {
-            print("🎵 PlayerView disappeared")
             player.stop()
         }
         .onChange(of: currentMix.id) { _, _ in
@@ -213,9 +208,6 @@ struct PlayerView: View {
         // Load cover image
         coverImage = FileStore.loadMixCover(currentMix.id)
 
-        print("🎵 PlayerView loading mix: \(currentMix.name)")
-        print("🎵 Mix file URL: \(currentMix.fileURL)")
-        print("🎵 Mix duration: \(currentMix.duration)s")
 
         // Stop current playback
         player.stop()
@@ -236,7 +228,6 @@ struct PlayerView: View {
             // Load full mix from metadata
             if let fullMix = try? FileStore.loadMix(nextMixMetadata.id) {
                 currentMix = fullMix
-                print("📱 Swiped to next mix: \(fullMix.name)")
             }
         }
     }
@@ -251,7 +242,6 @@ struct PlayerView: View {
             // Load full mix from metadata
             if let fullMix = try? FileStore.loadMix(previousMixMetadata.id) {
                 currentMix = fullMix
-                print("📱 Swiped to previous mix: \(fullMix.name)")
             }
         }
     }
@@ -290,8 +280,6 @@ struct PlayerView: View {
             }
             topController.present(activityVC, animated: true)
 
-            print("📤 Presenting share sheet for: \(currentMix.name)")
-            print("📤 File URL: \(currentMix.fileURL.path)")
         }
     }
 }
@@ -308,41 +296,32 @@ class MixPlayer: ObservableObject {
     @Published var progress: Double = 0
 
     func load(url: URL) {
-        print("🎵 Loading mix from: \(url)")
-        print("🎵 File exists: \(FileManager.default.fileExists(atPath: url.path))")
 
         // Verify file before attempting to load
         do {
             let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
             let fileSize = attributes[.size] as? Int ?? 0
-            print("🎵 File size: \(fileSize) bytes")
 
             if fileSize == 0 {
-                print("⚠️ File is empty!")
                 return
             }
         } catch {
-            print("⚠️ Cannot access file: \(error)")
             return
         }
 
         // Try to read file header to verify it's valid audio
         do {
             let data = try Data(contentsOf: url)
-            print("🎵 Read \(data.count) bytes from file")
 
             // Check for WAV header (RIFF)
             if data.count >= 4 {
                 let header = String(data: data.prefix(4), encoding: .ascii) ?? ""
-                print("🎵 File header: '\(header)' (should be 'RIFF')")
 
                 if header != "RIFF" {
-                    print("⚠️ Invalid WAV file - header is '\(header)' not 'RIFF'")
                     return
                 }
             }
         } catch {
-            print("⚠️ Cannot read file data: \(error)")
             return
         }
 
@@ -352,37 +331,23 @@ class MixPlayer: ObservableObject {
 
         // Load the audio file
         do {
-            print("🎵 Creating AVAudioPlayer...")
             audioPlayer = try AVAudioPlayer(contentsOf: url)
 
             guard let player = audioPlayer else {
-                print("⚠️ AVAudioPlayer is nil after creation")
                 return
             }
 
             player.prepareToPlay()
 
-            print("✅ Successfully loaded audio file")
-            print("   Duration: \(player.duration)s")
-            print("   Channels: \(player.numberOfChannels)")
-            print("   Format: \(player.format.sampleRate)Hz")
 
-        } catch let error as NSError {
-            print("⚠️ AVAudioPlayer creation failed:")
-            print("   Error domain: \(error.domain)")
-            print("   Error code: \(error.code)")
-            print("   Error description: \(error.localizedDescription)")
-            print("   User info: \(error.userInfo)")
+        } catch {
 
             // Try alternate approach with data
-            print("🔄 Trying alternate approach with Data...")
             do {
                 let audioData = try Data(contentsOf: url)
                 audioPlayer = try AVAudioPlayer(data: audioData)
                 audioPlayer?.prepareToPlay()
-                print("✅ Loaded via Data approach")
             } catch {
-                print("⚠️ Data approach also failed: \(error)")
             }
         }
     }
@@ -393,16 +358,12 @@ class MixPlayer: ObservableObject {
         audioPlayer?.play()
         isPlaying = true
         startTimer()
-        print("▶️ Playing mix")
-        print("🎵 Player isPlaying: \(audioPlayer?.isPlaying ?? false)")
-        print("🎵 Player duration: \(audioPlayer?.duration ?? 0)s")
     }
 
     func pause() {
         audioPlayer?.pause()
         isPlaying = false
         stopTimer()
-        print("⏸️ Paused mix")
     }
 
     func stop() {
@@ -411,7 +372,6 @@ class MixPlayer: ObservableObject {
         stopTimer()
         currentTime = 0
         progress = 0
-        print("⏹️ Stopped mix")
     }
 
     func seek(to time: TimeInterval) {
@@ -421,7 +381,9 @@ class MixPlayer: ObservableObject {
 
     private func startTimer() {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.updateProgress()
+            Task { @MainActor [weak self] in
+                self?.updateProgress()
+            }
         }
     }
 

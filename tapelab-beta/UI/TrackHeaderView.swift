@@ -15,6 +15,8 @@ struct TrackHeaderView: View {
     @State private var showFXSheet = false
     @State private var showVOLSheet = false
     @State private var showDeleteConfirmation = false
+    @State private var showCutAlert = false
+    @State private var cutAlertMessage = ""
 
     private var trackColor: Color {
         switch trackNumber {
@@ -113,29 +115,51 @@ struct TrackHeaderView: View {
         } message: { regionIndex in
             Text("Are you sure you want to delete \"Region \(regionIndex + 1)\"? This action cannot be undone.")
         }
+        .alert(
+            "Cannot Cut Region",
+            isPresented: $showCutAlert
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(cutAlertMessage)
+        }
     }
 
     // MARK: - Button Groups
 
     private var normalModeButtons: some View {
         HStack(spacing: 8) {
-            // FX Button
+            // FX Button with indicator dot
             Button(action: {
                 showFXSheet = true
             }) {
-                Text("FX")
-                    .font(.tapelabMonoTiny)
-                    .frame(width: 40, height: 20)
+                HStack(spacing: 4) {
+                    if track.fx.hasFXModified() {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 4, height: 4)
+                    }
+                    Text("FX")
+                        .font(.tapelabMonoTiny)
+                }
+                .frame(width: 40, height: 20)
             }
             .buttonStyle(TapelabButtonStyle())
 
-            // VOL Button
+            // VOL Button with indicator dot
             Button(action: {
                 showVOLSheet = true
             }) {
-                Text("VOL")
-                    .font(.tapelabMonoTiny)
-                    .frame(width: 40, height: 20)
+                HStack(spacing: 4) {
+                    if track.fx.hasVolumeModified() {
+                        Circle()
+                            .fill(Color.orange)
+                            .frame(width: 4, height: 4)
+                    }
+                    Text("VOL")
+                        .font(.tapelabMonoTiny)
+                }
+                .frame(width: 40, height: 20)
             }
             .buttonStyle(TapelabButtonStyle())
 
@@ -157,7 +181,11 @@ struct TrackHeaderView: View {
             // CUT Button
             Button(action: {
                 guard let regionIndex = selectedRegionIndex else { return }
-                runtime.cutRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
+                let result = runtime.cutRegion(trackIndex: trackNumber - 1, regionIndex: regionIndex)
+                if !result.success, let errorMessage = result.errorMessage {
+                    cutAlertMessage = errorMessage
+                    showCutAlert = true
+                }
             }) {
                 Text("CUT")
                     .font(.tapelabMonoTiny)
@@ -183,7 +211,7 @@ struct TrackHeaderView: View {
                 guard let regionIndex = selectedRegionIndex else { return }
                 runtime.toggleReverse(trackIndex: trackNumber - 1, regionIndex: regionIndex)
             }) {
-                let isReversed = selectedRegionIndex.map { track.regions[$0].reversed } ?? false
+                let _ = selectedRegionIndex.map { track.regions[$0].reversed } ?? false
                 Text("REV")
                     .font(.tapelabMonoTiny)
                     .frame(width: 40, height: 20)

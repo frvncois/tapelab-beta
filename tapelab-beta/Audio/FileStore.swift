@@ -85,7 +85,6 @@ public enum FileStore {
 
         let coverURL = mixCoverURL(mixID)
         try jpegData.write(to: coverURL)
-        print("📷 Saved mix cover image: \(coverURL.lastPathComponent)")
     }
 
     // MARK: - Region File Management
@@ -132,7 +131,6 @@ public enum FileStore {
         let data = try encoder.encode(session)
         try data.write(to: sessionFile, options: .atomic)
 
-        print("💾 Saved session: \(session.name) (\(session.id))")
     }
 
     /// Load a specific session by ID
@@ -151,7 +149,6 @@ public enum FileStore {
         decoder.dateDecodingStrategy = .iso8601
 
         let session = try decoder.decode(Session.self, from: data)
-        print("📂 Loaded session: \(session.name) (\(session.id))")
         return session
     }
 
@@ -184,14 +181,12 @@ public enum FileStore {
                 let session = try decoder.decode(Session.self, from: data)
                 metadata.append(SessionMetadata(from: session))
             } catch {
-                print("⚠️ Failed to load session from \(sessionDir.lastPathComponent): \(error)")
             }
         }
 
         // Sort by creation date, newest first
         metadata.sort { $0.createdAt > $1.createdAt }
 
-        print("📂 Loaded \(metadata.count) session metadata entries")
         return metadata
     }
 
@@ -199,7 +194,6 @@ public enum FileStore {
     public static func deleteSession(_ sessionID: UUID) throws {
         let sessionDir = sessionsBaseURL.appendingPathComponent(sessionID.uuidString, isDirectory: true)
         try FileManager.default.removeItem(at: sessionDir)
-        print("🗑️ Deleted session: \(sessionID)")
     }
 
     // MARK: - Mix Persistence
@@ -225,7 +219,6 @@ public enum FileStore {
         let data = try encoder.encode(mix)
         try data.write(to: metadataFile, options: .atomic)
 
-        print("💾 Saved mix: \(mix.name) (\(mix.id))")
     }
 
     /// Load a specific mix by ID
@@ -243,7 +236,6 @@ public enum FileStore {
         decoder.dateDecodingStrategy = .iso8601
 
         let mix = try decoder.decode(Mix.self, from: data)
-        print("📂 Loaded mix: \(mix.name) (\(mix.id))")
         return mix
     }
 
@@ -272,14 +264,12 @@ public enum FileStore {
                 let mix = try decoder.decode(Mix.self, from: data)
                 metadata.append(MixMetadata(from: mix))
             } catch {
-                print("⚠️ Failed to load mix from \(file.lastPathComponent): \(error)")
             }
         }
 
         // Sort by creation date, newest first
         metadata.sort { $0.createdAt > $1.createdAt }
 
-        print("📂 Loaded \(metadata.count) mix metadata entries")
         return metadata
     }
 
@@ -303,7 +293,6 @@ public enum FileStore {
         let metadataFile = mixesBaseURL.appendingPathComponent("\(mixID.uuidString).json")
         try FileManager.default.removeItem(at: metadataFile)
 
-        print("🗑️ Deleted mix: \(mixID)")
     }
 
     // MARK: - Private Helpers

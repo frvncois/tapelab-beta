@@ -9,41 +9,6 @@ import QuartzCore
 // Debug logging flag - set to false for production
 private let enableDebugLogs = false
 
-// MARK: - TimeSignature
-public enum TimeSignature: String, Codable, CaseIterable {
-    case threeFour = "3/4"
-    case fourFour = "4/4"
-    case fiveFour = "5/4"
-    case sevenFour = "7/4"
-    case sixEight = "6/8"
-
-    /// Number of beats per measure
-    public var beatsPerMeasure: Int {
-        switch self {
-        case .threeFour: return 3
-        case .fourFour: return 4
-        case .fiveFour: return 5
-        case .sevenFour: return 7
-        case .sixEight: return 6
-        }
-    }
-
-    /// Beat subdivision (4 = quarter note, 8 = eighth note)
-    public var beatSubdivision: Int {
-        switch self {
-        case .threeFour, .fourFour, .fiveFour, .sevenFour:
-            return 4
-        case .sixEight:
-            return 8
-        }
-    }
-
-    /// Display name
-    public var displayName: String {
-        return rawValue
-    }
-}
-
 // MARK: - RegionID
 public struct RegionID: Codable, Hashable, Identifiable {
     public let id: UUID
@@ -139,20 +104,10 @@ public struct SessionMetadata: Codable, Identifiable {
     }
 }
 
-public enum TimelineMode: String, Codable {
-    case seconds
-    case bpm
-}
-
 public struct Session: Codable, Identifiable {
     public let id: UUID
     public var name: String
     public var createdAt: Date
-    public var bpm: Double?  // Optional - nil means no BPM set
-    public var timeSignature: TimeSignature
-    public var timelineMode: TimelineMode  // seconds or bpm
-    public var metronomeCountIn: Bool  // Play 4-count before recording starts
-    public var metronomeWhileRecording: Bool  // Keep metronome playing during recording
     public var tracks: [Track]
 
     // Non-codable constant - not stored in JSON
@@ -160,26 +115,16 @@ public struct Session: Codable, Identifiable {
 
     // Exclude maxDuration from encoding/decoding
     enum CodingKeys: String, CodingKey {
-        case id, name, createdAt, bpm, timeSignature, timelineMode, metronomeCountIn, metronomeWhileRecording, tracks
+        case id, name, createdAt, tracks
     }
 
     public init(id: UUID = UUID(),
                 name: String,
                 createdAt: Date = Date(),
-                bpm: Double? = nil,
-                timeSignature: TimeSignature = .fourFour,
-                timelineMode: TimelineMode = .seconds,
-                metronomeCountIn: Bool = false,
-                metronomeWhileRecording: Bool = false,
                 tracks: [Track] = (1...4).map { Track(number: $0, isArmed: $0 == 1) }) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
-        self.bpm = bpm
-        self.timeSignature = timeSignature
-        self.timelineMode = timelineMode
-        self.metronomeCountIn = metronomeCountIn
-        self.metronomeWhileRecording = metronomeWhileRecording
         self.tracks = tracks
     }
 }
@@ -225,14 +170,12 @@ public final class TimelineState: ObservableObject {
         displayLink = CADisplayLink(target: self, selector: #selector(updatePlayhead))
         displayLink?.add(to: .main, forMode: .common)
         
-        print("⏱️ Timeline started with CADisplayLink")
     }
 
     public func stopTimeline() {
         displayLink?.invalidate()
         displayLink = nil
         isPlaying = false
-        print("⏸️ Timeline stopped")
     }
 
     /// Start timeline for recording-only mode (no playback)
@@ -246,14 +189,12 @@ public final class TimelineState: ObservableObject {
         displayLink = CADisplayLink(target: self, selector: #selector(updatePlayhead))
         displayLink?.add(to: .main, forMode: .common)
 
-        print("⏱️ Timeline started for recording (playback=false)")
     }
     
     @objc private func updatePlayhead() {
         // Update playhead during both playback AND recording
         guard isPlaying || isRecording else {
             if enableDebugLogs {
-                print("⚠️ updatePlayhead called but not playing/recording: isPlaying=\(isPlaying), isRecording=\(isRecording)")
             }
             return
         }
@@ -266,7 +207,6 @@ public final class TimelineState: ObservableObject {
 
         // Debug: Log first few updates (disabled for performance)
         if enableDebugLogs && (lastUpdateTime == 0 || Int(playhead * 10) != Int(newPlayhead * 10)) {
-            print("🔄 Playhead update: \(String(format: "%.2f", newPlayhead))s (isPlaying=\(isPlaying), isRecording=\(isRecording))")
         }
 
         playhead = newPlayhead

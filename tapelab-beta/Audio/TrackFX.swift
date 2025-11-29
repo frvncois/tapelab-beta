@@ -20,9 +20,9 @@ public struct EQBand: Codable, Hashable {
 // MARK: - Reverb FX
 public struct ReverbFX: Codable, Hashable {
     public var wetMix: Float       // 0–100
-    public var roomSize: Bool      // true = large hall, false = small room
+    public var roomSize: Bool      // true = large hall (always use large hall)
     public var preDelay: Double    // seconds
-    public static let neutral = ReverbFX(wetMix: 0, roomSize: false, preDelay: 0)
+    public static let neutral = ReverbFX(wetMix: 0, roomSize: true, preDelay: 0)
 }
 
 // MARK: - Delay FX
@@ -77,5 +77,43 @@ public struct TrackFX: Codable, Hashable {
         self.reverb = reverb
         self.delay = delay
         self.saturation = saturation
+    }
+
+    // MARK: - Helper Methods
+
+    /// Check if FX parameters (reverb, delay, saturation) are modified from defaults
+    public func hasFXModified() -> Bool {
+        return reverb.wetMix > 0 || delay.wetMix > 0 || saturation.wetMix > 0
+    }
+
+    /// Check if volume/EQ parameters are modified from defaults
+    public func hasVolumeModified() -> Bool {
+        // Check volume and pan
+        let volumeChanged = abs(volumeDB) > 0.01
+        let panChanged = abs(pan) > 0.01
+
+        // Check if any EQ band has non-zero gain
+        let eqChanged = eqBands.contains { abs($0.gainDB) > 0.01 }
+
+        return volumeChanged || panChanged || eqChanged
+    }
+
+    /// Reset FX to defaults (reverb, delay, saturation)
+    public mutating func resetFX() {
+        reverb = .neutral
+        delay = .neutral
+        saturation = .neutral
+    }
+
+    /// Reset volume and EQ to defaults
+    public mutating func resetVolume() {
+        volumeDB = 0.0
+        pan = 0.0
+        eqBands = [
+            EQBand(frequency: 100),
+            EQBand(frequency: 500),
+            EQBand(frequency: 2000),
+            EQBand(frequency: 8000)
+        ]
     }
 }

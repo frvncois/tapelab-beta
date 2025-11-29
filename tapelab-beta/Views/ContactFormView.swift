@@ -229,11 +229,6 @@ struct ContactFormView: View {
 
     private func submitContactForm() {
         // Here you would send the contact form to your backend
-        print("📧 Contact Form Submitted:")
-        print("Name: \(fullName)")
-        print("Email: \(email)")
-        print("Subject: \(subject)")
-        print("Message: \(message)")
 
         withAnimation {
             showConfirmation = true

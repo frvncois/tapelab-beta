@@ -384,16 +384,6 @@ struct BugReportFormView: View {
 
     private func submitBugReport() {
         // Here you would send the bug report to your backend
-        print("📝 Bug Report Submitted:")
-        print("Issue persists: \(issuePersiststAfterClose)")
-        print("Headphone: \(headphoneType)")
-        print("iPhone: \(iphoneModel)")
-        print("iOS: \(iosVersion)")
-        print("Category: \(issueCategory)")
-        print("Description: \(issueDescription)")
-        print("Name: \(name)")
-        print("Email: \(email)")
-        print("Details: \(moreDetails)")
 
         withAnimation {
             showConfirmation = true

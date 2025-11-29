@@ -2,11 +2,7 @@ import SwiftUI
 import Lottie
 
 struct SettingsView: View {
-    @State private var showAboutView = false
-    @State private var showTermsView = false
-    @State private var showPrivacyView = false
-    @State private var showContactSupport = false
-    @State private var showHelpCenter = false
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         ZStack {
@@ -19,37 +15,30 @@ struct SettingsView: View {
                     ProPlanCard()
 
                     // Help & Support Box with Lottie
-                    HelpSupportCard(showHelpCenter: $showHelpCenter)
+                    HelpSupportCard(openURL: openURL)
 
                     // About Section
                     SettingsSectionView(title: "About") {
                         SettingsRowView(
                             icon: "info.circle",
-                            title: "About Tapelab",
+                            title: "About 4TRACK",
                             action: {
-                                showAboutView = true
+                                openURL(URL(string: "https://4track.app")!)
                             }
                         )
                         SettingsRowView(
                             icon: "doc.text",
                             title: "Terms of Service",
                             action: {
-                                showTermsView = true
+                                openURL(URL(string: "https://4track.app/terms")!)
                             }
                         )
                         SettingsRowView(
                             icon: "hand.raised",
                             title: "Privacy Policy",
-                            action: {
-                                showPrivacyView = true
-                            }
-                        )
-                        SettingsRowView(
-                            icon: "envelope",
-                            title: "Contact Support",
                             showSeparator: false,
                             action: {
-                                showContactSupport = true
+                                openURL(URL(string: "https://4track.app/privacy")!)
                             }
                         )
                     }
@@ -60,26 +49,11 @@ struct SettingsView: View {
                 .padding(.vertical, 16)
             }
         }
-        .sheet(isPresented: $showAboutView) {
-            AboutView()
-        }
-        .sheet(isPresented: $showTermsView) {
-            TermsOfServiceView()
-        }
-        .sheet(isPresented: $showPrivacyView) {
-            PrivacyPolicyView()
-        }
-        .sheet(isPresented: $showContactSupport) {
-            ContactSupportView()
-        }
-        .sheet(isPresented: $showHelpCenter) {
-            HelpCenterView()
-        }
     }
 }
 
 struct HelpSupportCard: View {
-    @Binding var showHelpCenter: Bool
+    let openURL: OpenURLAction
 
     var body: some View {
         VStack(spacing: 16) {
@@ -106,7 +80,7 @@ struct HelpSupportCard: View {
 
             // Help Center button
             Button(action: {
-                showHelpCenter = true
+                openURL(URL(string: "https://4track.app/help")!)
             }) {
                 Text("HELP CENTER")
                     .font(.tapelabMonoSmall)
@@ -130,11 +104,11 @@ struct ProPlanCard: View {
                     .foregroundColor(.tapelabRed)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("TAPELAB PRO")
+                    Text("4TRACK PRO")
                         .font(.tapelabMonoBold)
                         .foregroundColor(.tapelabLight)
 
-                    Text("$4.99/month")
+                    Text("$1.99/month")
                         .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabAccentFull.opacity(0.7))
                 }
@@ -145,10 +119,7 @@ struct ProPlanCard: View {
             // Features List
             VStack(alignment: .leading, spacing: 12) {
                 ProFeatureRow(icon: "infinity", label: "Sessions", value: "Unlimited")
-                ProFeatureRow(icon: "clock", label: "Length", value: "8 minutes")
                 ProFeatureRow(icon: "music.note", label: "Mixes", value: "Unlimited")
-                ProFeatureRow(icon: "metronome", label: "Metronome", value: "Yes")
-                ProFeatureRow(icon: "tuningfork", label: "Tuner", value: "Yes")
             }
 
             // Subscribe Button

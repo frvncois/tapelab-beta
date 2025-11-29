@@ -19,7 +19,6 @@ public final class AudioRuntime: ObservableObject {
     }
     @Published var isProcessing: Bool = false
     @Published var processingMessage: String = ""
-    let metronome = Metronome()
 
     // Alert state
     @Published var alertTitle: String = ""
@@ -32,7 +31,6 @@ public final class AudioRuntime: ObservableObject {
         player.engineController = engine
         recorder.engineController = engine
 
-        // Set up recorder callback to update session in real-time
         recorder.onSessionUpdate = { [weak self] updatedSession in
             guard let self = self else { return }
             self.session = updatedSession
@@ -47,15 +45,14 @@ public final class AudioRuntime: ObservableObject {
         ) { [weak self] _ in
             guard let self = self else { return }
 
-            if self.timeline.isRecording,
-               let trackIndex = self.recorder.currentRecordingTrackIndex {
-                print("⚠️ Audio device disconnected during recording - stopping")
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
 
-                // Stop recording immediately
-                Task { @MainActor in
+                if self.timeline.isRecording,
+                   let trackIndex = self.recorder.currentRecordingTrackIndex {
+
                     self.stopRecording(onTrack: trackIndex)
 
-                    // Alert user
                     self.showAlert(
                         title: "Recording Stopped",
                         message: "Your audio device was disconnected. The recording has been saved."
@@ -70,14 +67,15 @@ public final class AudioRuntime: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self = self,
-                  let error = notification.object as? Error else { return }
+            guard let self = self else { return }
+            let error = notification.object as? Error
 
-            if self.timeline.isRecording,
-               let trackIndex = self.recorder.currentRecordingTrackIndex {
-                print("⚠️ Disk full during recording - emergency stop")
+            Task { @MainActor [weak self] in
+                guard let self = self, let error = error else { return }
 
-                Task { @MainActor in
+                if self.timeline.isRecording,
+                   let trackIndex = self.recorder.currentRecordingTrackIndex {
+
                     self.stopRecording(onTrack: trackIndex)
 
                     self.showAlert(
@@ -96,22 +94,22 @@ public final class AudioRuntime: ObservableObject {
         ) { [weak self] _ in
             guard let self = self else { return }
 
-            if self.timeline.isRecording,
-               let trackIndex = self.recorder.currentRecordingTrackIndex {
-                print("⚠️ Interruption during recording - stopping")
-                Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+
+                if self.timeline.isRecording,
+                   let trackIndex = self.recorder.currentRecordingTrackIndex {
                     self.stopRecording(onTrack: trackIndex)
                     self.showAlert(
                         title: "Recording Interrupted",
                         message: "Recording was stopped due to interruption (call, Siri, etc). Your recording has been saved."
                     )
+                } else if self.timeline.isPlaying {
+                    self.stopPlayback(resetPlayhead: false)
                 }
-            } else if self.timeline.isPlaying {
-                self.stopPlayback(resetPlayhead: false)
             }
         }
 
-        print("🎛️ Audio runtime initialized (4-track engine)")
     }
 
     // MARK: - Alert Helper
@@ -120,15 +118,11 @@ public final class AudioRuntime: ObservableObject {
         alertTitle = title
         alertMessage = message
         showAlert = true
-        print("📢 ALERT: \(title) - \(message)")
     }
 
-    /// Auto-save session with debouncing to avoid excessive writes
     private func autoSaveSession() {
-        // Cancel any pending save
         autoSaveTask?.cancel()
 
-        // Debounce: wait 500ms before saving
         autoSaveTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
 
@@ -137,7 +131,6 @@ public final class AudioRuntime: ObservableObject {
             do {
                 try FileStore.saveSession(session)
             } catch {
-                print("⚠️ Failed to auto-save session: \(error)")
             }
         }
     }
@@ -147,7 +140,6 @@ public final class AudioRuntime: ObservableObject {
             try await player.play(session: session, timeline: timeline)
         }
         catch {
-            print("⚠️ Playback failed: \(error)")
         }
     }
     
@@ -156,123 +148,77 @@ public final class AudioRuntime: ObservableObject {
     func stopPlayback(resetPlayhead: Bool = true) {
         player.stop()
         timeline.isPlaying = false
-        
+
         if resetPlayhead {
             timeline.playhead = 0
-            print("⏹️ Stopped playback, reset playhead to 0")
-        } else {
-            print("⏹️ Stopped playback, preserved playhead at \(String(format: "%.2f", timeline.playhead))s")
         }
-        
-        // Force SwiftUI to update
+
         objectWillChange.send()
     }
     
-    func startRecording(onTrack index: Int) async {
-        print("🔍 AudioRuntime.startRecording called for track \(index + 1)")
-        print("🔍 Timeline isRecording BEFORE: \(timeline.isRecording)")
+    func startRecording(onTrack index: Int) async -> Bool {
+
+        if timeline.isLoopMode {
+            timeline.isLoopMode = false
+        }
+
+        if !HeadphoneDetector.areHeadphonesConnected() {
+            showAlert(
+                title: "Headphones Required",
+                message: "Please connect headphones to record. This prevents feedback and allows you to hear playback while recording."
+            )
+            return false
+        }
 
         do {
             // CRITICAL: Tell player to exclude this track from playback during recording
             // This prevents file access conflicts (player reading while recorder writing)
             player.setRecordingTrack(index)
 
-            // Start playback of existing tracks for overdubbing
+            // Check if there's existing audio on OTHER tracks (not the one being recorded)
+            // This determines if we need output latency compensation for overdubbing
+            let hasExistingAudio = session.tracks.enumerated().contains { (trackIndex, track) in
+                trackIndex != index && !track.regions.isEmpty
+            }
+
             if !timeline.isPlaying {
-                print("🎧 Starting playback for overdubbing...")
                 try await player.play(session: session, timeline: timeline)
             }
 
-            // Start recording IMMEDIATELY (captures count-in clicks)
-            session = try await recorder.startRecording(session: session, timeline: timeline, trackIndex: index)
-            print("🔍 Timeline isRecording AFTER: \(timeline.isRecording)")
+            session = try await recorder.startRecording(session: session, timeline: timeline, trackIndex: index, needsLatencyCompensation: hasExistingAudio)
 
-            // NOW play the count-in metronome (it gets recorded)
-            // Only play metronome if BPM is set
-            if let bpm = session.bpm {
-                if session.metronomeCountIn {
-                    let beatsPerMeasure = session.timeSignature.beatsPerMeasure
-                    print("🥁 Starting \(beatsPerMeasure)-count metronome (recording already started)...")
-                    metronome.bpm = bpm
-                    metronome.timeSignature = session.timeSignature
-
-                    // Start metronome for count-in
-                    await metronome.play()
-
-                    // Calculate count-in duration (full measure based on time signature)
-                    let beatDuration = 60.0 / bpm
-                    let countInDuration = beatDuration * Double(beatsPerMeasure)
-
-                    // Wait for one full measure
-                    try await Task.sleep(nanoseconds: UInt64(countInDuration * 1_000_000_000))
-
-                    // Stop metronome after count-in if not playing during recording
-                    if !session.metronomeWhileRecording {
-                        metronome.stop()
-                        print("🥁 Count-in complete, metronome stopped")
-                    } else {
-                        print("🥁 Count-in complete, metronome continues")
-                    }
-                } else if session.metronomeWhileRecording {
-                    // No count-in but play metronome during recording
-                    print("🥁 Starting metronome for recording...")
-                    metronome.bpm = bpm
-                    metronome.timeSignature = session.timeSignature
-                    await metronome.play()
-                }
-            }
-
-            // Force SwiftUI to update by triggering objectWillChange
             objectWillChange.send()
+            return true
         }
         catch {
-            print("⚠️ Recording failed: \(error)")
-            // Stop metronome on error
-            if metronome.isPlaying {
-                metronome.stop()
-            }
+            return false
         }
     }
-    
+
     func stopRecording(onTrack index: Int) {
-        // Show processing indicator
         isProcessing = true
         processingMessage = "Processing Recording"
         objectWillChange.send()
 
         let startTime = Date()
 
-        // Capture the recording start position before stopping
         let recordingStartPosition = recorder.activeRecording?.startTime ?? timeline.playhead
 
         recorder.stopRecording(session: &session, trackIndex: index, timeline: timeline)
 
-        // Stop metronome if playing
-        if metronome.isPlaying {
-            metronome.stop()
-            print("🥁 Metronome stopped")
-        }
-
-        // CRITICAL: Clear the recording track exclusion so it can be played back
         player.setRecordingTrack(nil)
 
-        // CRITICAL: Stop playback when recording stops
-        // This ensures pressing "stop record" also stops playback
         player.stop()
         timeline.isPlaying = false
 
-        // Move playhead back to the beginning of the recorded section
         timeline.seek(to: recordingStartPosition)
-        print("⏹️ Stopped recording AND playback, moved playhead back to \(String(format: "%.2f", recordingStartPosition))s")
 
-        // Ensure minimum 3 second display time
         Task {
             let elapsed = Date().timeIntervalSince(startTime)
             if elapsed < 3.0 {
                 try? await Task.sleep(nanoseconds: UInt64((3.0 - elapsed) * 1_000_000_000))
             }
 
-            // Hide processing indicator
             await MainActor.run {
                 isProcessing = false
                 processingMessage = ""
@@ -287,20 +233,16 @@ public final class AudioRuntime: ObservableObject {
     ///   - regionIndex: Index of the region within the track
     ///   - newStartTime: New start time in seconds
     func updateRegionPosition(trackIndex: Int, regionIndex: Int, newStartTime: TimeInterval) {
-        // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
-            print("⚠️ Invalid track index: \(trackIndex)")
             return
         }
 
         guard regionIndex >= 0 && regionIndex < session.tracks[trackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
             return
         }
 
         // Don't allow moving regions while recording
         guard !timeline.isRecording else {
-            print("⚠️ Cannot move regions while recording")
             return
         }
 
@@ -312,7 +254,6 @@ public final class AudioRuntime: ObservableObject {
         // Update the region's start time
         session.tracks[trackIndex].regions[regionIndex].startTime = clampedStartTime
 
-        print("📍 Moved region \(regionIndex) on track \(trackIndex + 1) to \(String(format: "%.2f", clampedStartTime))s")
 
         // If playback is active, restart it to reflect the new position
         if timeline.isPlaying {
@@ -330,22 +271,21 @@ public final class AudioRuntime: ObservableObject {
     /// - Parameters:
     ///   - trackIndex: Index of the track containing the region (0-based)
     ///   - regionIndex: Index of the region within the track to cut
-    func cutRegion(trackIndex: Int, regionIndex: Int) {
+    /// - Returns: Success status and optional error message
+    @discardableResult
+    func cutRegion(trackIndex: Int, regionIndex: Int) -> (success: Bool, errorMessage: String?) {
         // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
-            print("⚠️ Invalid track index: \(trackIndex)")
-            return
+            return (false, nil)
         }
 
         guard regionIndex >= 0 && regionIndex < session.tracks[trackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
-            return
+            return (false, nil)
         }
 
         // Don't allow cutting while recording or playing
         guard !timeline.isRecording && !timeline.isPlaying else {
-            print("⚠️ Cannot cut regions while recording or playing")
-            return
+            return (false, nil)
         }
 
         let region = session.tracks[trackIndex].regions[regionIndex]
@@ -354,8 +294,14 @@ public final class AudioRuntime: ObservableObject {
         // Validate that playhead is within this region
         let regionEnd = region.startTime + region.duration
         guard cutPosition > region.startTime && cutPosition < regionEnd else {
-            print("⚠️ Playhead is not within region bounds")
-            return
+            return (false, "Move the playhead where you want to cut the region")
+        }
+
+        // Check if playhead is at least 0.25s from start or end
+        let minDistanceFromEdge: TimeInterval = 0.25
+        guard cutPosition >= (region.startTime + minDistanceFromEdge) &&
+              cutPosition <= (regionEnd - minDistanceFromEdge) else {
+            return (false, "Move the playhead where you want to cut the region")
         }
 
         // Calculate split point relative to region start
@@ -395,12 +341,11 @@ public final class AudioRuntime: ObservableObject {
         // Clear selection
         timeline.selectedRegion = nil
 
-        print("✂️ Cut region at \(String(format: "%.2f", cutPosition))s on track \(trackIndex + 1)")
-        print("   First region: \(String(format: "%.2f", firstRegion.duration))s")
-        print("   Second region: \(String(format: "%.2f", secondRegion.duration))s")
 
         // Force SwiftUI to update
         objectWillChange.send()
+
+        return (true, nil)
     }
 
     /// Delete a region from a track
@@ -410,23 +355,19 @@ public final class AudioRuntime: ObservableObject {
     func deleteRegion(trackIndex: Int, regionIndex: Int) {
         // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
-            print("⚠️ Invalid track index: \(trackIndex)")
             return
         }
 
         guard regionIndex >= 0 && regionIndex < session.tracks[trackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
             return
         }
 
         // Don't allow deleting regions while recording
         guard !timeline.isRecording else {
-            print("⚠️ Cannot delete regions while recording")
             return
         }
 
         let region = session.tracks[trackIndex].regions[regionIndex]
-        print("🗑️ Deleting region \(regionIndex) on track \(trackIndex + 1): \(region.sourceURL.lastPathComponent)")
 
         // Clear selection state if this region is selected
         if let selected = timeline.selectedRegion,
@@ -442,9 +383,7 @@ public final class AudioRuntime: ObservableObject {
         /*
         do {
             try FileManager.default.removeItem(at: region.sourceURL)
-            print("🗑️ Deleted audio file: \(region.sourceURL.lastPathComponent)")
         } catch {
-            print("⚠️ Failed to delete audio file: \(error)")
         }
         */
 
@@ -467,18 +406,15 @@ public final class AudioRuntime: ObservableObject {
     func duplicateRegion(trackIndex: Int, regionIndex: Int) {
         // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
-            print("⚠️ Invalid track index: \(trackIndex)")
             return
         }
 
         guard regionIndex >= 0 && regionIndex < session.tracks[trackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
             return
         }
 
         // Don't allow duplicating regions while recording
         guard !timeline.isRecording else {
-            print("⚠️ Cannot duplicate regions while recording")
             return
         }
 
@@ -489,7 +425,6 @@ public final class AudioRuntime: ObservableObject {
 
         // Ensure duplicate doesn't exceed max duration
         guard newStartTime + originalRegion.duration <= session.maxDuration else {
-            print("⚠️ Cannot duplicate region: would exceed max duration")
             return
         }
 
@@ -508,7 +443,9 @@ public final class AudioRuntime: ObservableObject {
         // Insert duplicate after original
         session.tracks[trackIndex].regions.insert(duplicate, at: regionIndex + 1)
 
-        print("📋 Duplicated region \(regionIndex) on track \(trackIndex + 1) at \(String(format: "%.2f", newStartTime))s")
+        // Move playhead to the start of the duplicated region
+        timeline.playhead = newStartTime
+
     }
 
     /// Move a region from one track to another
@@ -519,31 +456,26 @@ public final class AudioRuntime: ObservableObject {
     func moveRegionToTrack(fromTrackIndex: Int, regionIndex: Int, toTrackIndex: Int) {
         // Validate source track index
         guard fromTrackIndex >= 0 && fromTrackIndex < session.tracks.count else {
-            print("⚠️ Invalid source track index: \(fromTrackIndex)")
             return
         }
 
         // Validate destination track index
         guard toTrackIndex >= 0 && toTrackIndex < session.tracks.count else {
-            print("⚠️ Invalid destination track index: \(toTrackIndex)")
             return
         }
 
         // Validate region index
         guard regionIndex >= 0 && regionIndex < session.tracks[fromTrackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
             return
         }
 
         // Don't allow moving if same track
         guard fromTrackIndex != toTrackIndex else {
-            print("⚠️ Cannot move region to the same track")
             return
         }
 
         // Don't allow moving regions while recording or playing
         guard !timeline.isRecording && !timeline.isPlaying else {
-            print("⚠️ Cannot move regions while recording or playing")
             return
         }
 
@@ -559,7 +491,6 @@ public final class AudioRuntime: ObservableObject {
         // Clear selection since the region has moved
         timeline.selectedRegion = nil
 
-        print("🔄 Moved region \(regionIndex) from track \(fromTrackIndex + 1) to track \(toTrackIndex + 1)")
 
         // If playback is active, restart it to reflect the duplication
         if timeline.isPlaying {
@@ -580,18 +511,15 @@ public final class AudioRuntime: ObservableObject {
     func toggleReverse(trackIndex: Int, regionIndex: Int) {
         // Validate indices
         guard trackIndex >= 0 && trackIndex < session.tracks.count else {
-            print("⚠️ Invalid track index: \(trackIndex)")
             return
         }
 
         guard regionIndex >= 0 && regionIndex < session.tracks[trackIndex].regions.count else {
-            print("⚠️ Invalid region index: \(regionIndex)")
             return
         }
 
         // Don't allow reversing regions while recording
         guard !timeline.isRecording else {
-            print("⚠️ Cannot reverse regions while recording")
             return
         }
 
@@ -599,7 +527,6 @@ public final class AudioRuntime: ObservableObject {
         session.tracks[trackIndex].regions[regionIndex].reversed.toggle()
         let isReversed = session.tracks[trackIndex].regions[regionIndex].reversed
 
-        print("🔄 Toggled reverse for region \(regionIndex) on track \(trackIndex + 1): \(isReversed ? "ON" : "OFF")")
 
         // If playback is active, restart it to reflect the change
         if timeline.isPlaying {
@@ -618,7 +545,6 @@ public final class AudioRuntime: ObservableObject {
 
     /// Suspend audio engine and monitoring for external playback (e.g., PlayerView)
     func suspendForExternalPlayback() {
-        print("🎵 Suspending engine for external playback")
 
         // Stop any ongoing playback or recording
         if timeline.isPlaying {
@@ -631,34 +557,26 @@ public final class AudioRuntime: ObservableObject {
         // Deactivate audio session
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            print("✅ Audio session released")
         } catch {
-            print("⚠️ Failed to release audio session: \(error)")
         }
     }
 
     /// Resume audio engine after external playback
     func resumeAfterExternalPlayback() {
-        print("🎵 Resuming engine after external playback")
 
         // Reconfigure audio session
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP, .defaultToSpeaker])
             try session.setActive(true)
-            print("✅ Audio session restored to playAndRecord")
         } catch {
-            print("⚠️ Failed to restore audio session: \(error)")
         }
 
         // Restart engine
         do {
             try engine.start()
-            print("✅ Engine restarted")
         } catch {
-            print("⚠️ Failed to restart engine: \(error)")
         }
 
-        print("✅ Engine and audio session resumed")
     }
 }

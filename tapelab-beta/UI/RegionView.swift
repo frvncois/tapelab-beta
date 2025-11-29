@@ -54,10 +54,11 @@ struct RegionView: View {
         // If THIS region is the one being recorded, calculate live duration
         if isThisRegionRecording, let timeline = timeline {
             // Live duration = current playhead - region start time
+            // Use max to prevent negative width during initialization
             let liveDuration = max(0, timeline.playhead - region.startTime)
-            return liveDuration * pixelsPerSecond
+            return max(40, liveDuration * pixelsPerSecond) // Minimum 40pt width
         } else {
-            return region.duration * pixelsPerSecond
+            return max(40, region.duration * pixelsPerSecond)
         }
     }
 
@@ -168,7 +169,8 @@ struct RegionView: View {
                 color: waveformColor,
                 backgroundColor: regionBackgroundColor
             )
-            .frame(width: max(width, 40), height: 60)
+            .frame(width: width, height: 60)
+            .animation(nil, value: width) // No implicit animation - follow data directly
             .cornerRadius(4)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -182,9 +184,9 @@ struct RegionView: View {
                     .foregroundColor(.tapelabLight.opacity(0.7))
             }
             .padding(4)
-            .frame(width: max(width, 40), height: 60, alignment: .topLeading)
+            .frame(width: width, height: 60, alignment: .topLeading)
         }
-        .frame(width: max(width, 40), height: 60, alignment: .topLeading)
+        .frame(width: width, height: 60, alignment: .topLeading)
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
@@ -281,7 +283,6 @@ struct RegionView: View {
                     if let timeline = timeline {
                         let inDeleteZone = isInDeleteZone()
                         if timeline.isDraggingToDelete != inDeleteZone {
-                            print("🗑️ Delete zone state: \(inDeleteZone)")
                             timeline.isDraggingToDelete = inDeleteZone
                         }
                     }
@@ -343,28 +344,29 @@ struct RegionView: View {
 
         // Don't load waveform if we don't have a buffer accessor
         guard let getBuffer = getRegionBuffer else {
-            print("⚠️ RegionView: No buffer accessor available")
             waveformSamples = []
             return
         }
 
-        print("📊 RegionView attempting to load waveform for region \(region.id.id) on track \(trackNumber)")
 
         // Get the buffer for this region
         guard let buffer = getBuffer(trackNumber - 1, region.id.id) else {
-            print("⚠️ RegionView: No buffer available for region \(region.id.id)")
             waveformSamples = []
             return
         }
 
+        // Calculate target points based on width to ensure proper waveform density
+        // We want approximately 2-3 points per pixel for smooth rendering
+        let regionWidth = region.duration * pixelsPerSecond
+        let targetPoints = max(100, min(2000, Int(regionWidth * 2.5)))
+
         // Generate waveform data on a background thread
         Task.detached(priority: .userInitiated) {
-            let samples = WaveformGenerator.generateWaveformData(from: buffer, targetPoints: 500)
+            let samples = WaveformGenerator.generateWaveformData(from: buffer, targetPoints: targetPoints)
 
             // Update UI on main thread
             await MainActor.run {
                 waveformSamples = samples
-                print("📊 Loaded waveform for region \(region.id.id): \(samples.count) points")
             }
         }
     }

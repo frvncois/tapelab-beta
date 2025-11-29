@@ -59,12 +59,10 @@ struct AudioFileImporter: UIViewControllerRepresentable {
 
             // Verify file exists and is accessible
             guard FileManager.default.fileExists(atPath: url.path) else {
-                print("⚠️ File does not exist at path: \(url.path)")
                 onCancel()
                 return
             }
 
-            print("📁 Picked file from: \(url.path)")
 
             // Copy to a more permanent temp location (Inbox may be cleaned up by iOS)
             let tempDir = FileManager.default.temporaryDirectory
@@ -73,16 +71,13 @@ struct AudioFileImporter: UIViewControllerRepresentable {
             do {
                 // Simple copy - no security-scoped access needed for Inbox files
                 try FileManager.default.copyItem(at: url, to: tempURL)
-                print("✅ Copied audio file to temp location: \(tempURL.lastPathComponent)")
 
                 // Clean up the Inbox file (optional but good practice)
                 try? FileManager.default.removeItem(at: url)
-                print("🗑️ Cleaned up Inbox file")
 
                 onFileSelected(tempURL)
 
             } catch {
-                print("⚠️ Failed to copy audio file: \(error)")
                 onCancel()
             }
         }

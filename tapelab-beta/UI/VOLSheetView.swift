@@ -22,7 +22,7 @@ struct VOLSheetView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Volume & Pan Section
+                        // MIX Section (Volume & Pan in one box)
                         VStack(alignment: .leading, spacing: 12) {
                             // Section header with dot
                             HStack(spacing: 8) {
@@ -35,16 +35,17 @@ struct VOLSheetView: View {
                                     .foregroundColor(.tapelabLight)
                             }
 
+                            // Volume & Pan controls in one box
                             VStack(spacing: 16) {
                                 // Volume control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("VOLUME")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(String(format: "%.1f dB", track.fx.volumeDB))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -58,21 +59,18 @@ struct VOLSheetView: View {
                                     ), in: -40...12, step: 0.5)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
 
                                 // Pan control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("PAN")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(track.fx.pan < 0 ? String(format: "L%.0f", abs(track.fx.pan) * 100) :
                                              track.fx.pan > 0 ? String(format: "R%.0f", track.fx.pan * 100) :
                                              "C")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -86,13 +84,13 @@ struct VOLSheetView: View {
                                     ), in: -1...1, step: 0.1)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
                             }
+                            .padding(16)
+                            .background(TapelabTheme.Colors.surface)
+                            .cornerRadius(8)
                         }
 
-                        // EQ Section
+                        // EQUALIZER Section (All EQ bands in one box)
                         VStack(alignment: .leading, spacing: 12) {
                             // Section header with dot
                             HStack(spacing: 8) {
@@ -105,23 +103,24 @@ struct VOLSheetView: View {
                                     .foregroundColor(.tapelabLight)
                             }
 
+                            // All EQ bands in one box
                             VStack(spacing: 0) {
                                 ForEach(track.fx.eqBands.indices, id: \.self) { index in
                                     VStack(alignment: .leading, spacing: 12) {
                                         // Band label
                                         Text(eqBandLabel(for: index))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
 
                                         // Frequency control
                                         VStack(alignment: .leading, spacing: 6) {
                                             HStack {
                                                 Text("FREQUENCY")
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                 Spacer()
                                                 Text(formatFrequency(track.fx.eqBands[index].frequency))
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                     .monospacedDigit()
                                             }
@@ -140,11 +139,11 @@ struct VOLSheetView: View {
                                         VStack(alignment: .leading, spacing: 6) {
                                             HStack {
                                                 Text("GAIN")
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                 Spacer()
                                                 Text(formatGain(track.fx.eqBands[index].gainDB))
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                     .monospacedDigit()
                                             }
@@ -163,11 +162,11 @@ struct VOLSheetView: View {
                                         VStack(alignment: .leading, spacing: 6) {
                                             HStack {
                                                 Text("Q FACTOR")
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                 Spacer()
                                                 Text(formatQ(track.fx.eqBands[index].q))
-                                                    .font(.tapelabMonoTiny)
+                                                    .font(.tapelabMonoSmall)
                                                     .foregroundColor(.tapelabAccentFull)
                                                     .monospacedDigit()
                                             }
@@ -183,7 +182,6 @@ struct VOLSheetView: View {
                                         }
                                     }
                                     .padding(16)
-                                    .background(TapelabTheme.Colors.surface)
 
                                     // Add separator between bands
                                     if index < track.fx.eqBands.count - 1 {
@@ -192,6 +190,26 @@ struct VOLSheetView: View {
                                     }
                                 }
                             }
+                            .background(TapelabTheme.Colors.surface)
+                            .cornerRadius(8)
+                        }
+
+                        // Reset Button
+                        Button(action: {
+                            track.fx.resetVolume()
+                            applyFXUpdate()
+                            HapticsManager.shared.effectToggled()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 14))
+                                Text("RESET")
+                                    .font(.tapelabMonoSmall)
+                            }
+                            .foregroundColor(.tapelabLight)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.tapelabButtonBg)
                             .cornerRadius(8)
                         }
 
@@ -201,9 +219,13 @@ struct VOLSheetView: View {
                     .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("Track \(track.number) Volume & EQ")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Track \(track.number) Volume & EQ")
+                        .font(.tapelabMono)
+                        .foregroundColor(.tapelabLight)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         dismiss()

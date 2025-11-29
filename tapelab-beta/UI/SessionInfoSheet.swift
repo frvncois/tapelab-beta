@@ -22,6 +22,22 @@ struct SessionInfoSheet: View {
                     .foregroundColor(.tapelabLight)
                     .padding(.top, 20)
 
+                // Session Name Field
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("SESSION NAME")
+                        .font(.tapelabMonoTiny)
+                        .foregroundColor(.tapelabAccentFull.opacity(0.7))
+
+                    TextField("Session name", text: $sessionName)
+                        .font(.tapelabMono)
+                        .foregroundColor(.tapelabLight)
+                        .padding(12)
+                        .background(TapelabTheme.Colors.surface)
+                        .cornerRadius(8)
+                        .focused($isTextFieldFocused)
+                }
+                .padding(.horizontal, 20)
+
                 // Cover Photo Section
                 VStack(spacing: 12) {
                     Text("COVER PHOTO")
@@ -55,7 +71,7 @@ struct SessionInfoSheet: View {
                             }
                         }
                     }
-                    .onChange(of: selectedItem) { newItem in
+                    .onChange(of: selectedItem) { _, newItem in
                         Task {
                             if let data = try? await newItem?.loadTransferable(type: Data.self),
                                let uiImage = UIImage(data: data) {
@@ -65,22 +81,6 @@ struct SessionInfoSheet: View {
                             }
                         }
                     }
-                }
-                .padding(.horizontal, 20)
-
-                // Session Name Field
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("SESSION NAME")
-                        .font(.tapelabMonoTiny)
-                        .foregroundColor(.tapelabAccentFull.opacity(0.7))
-
-                    TextField("Session name", text: $sessionName)
-                        .font(.tapelabMono)
-                        .foregroundColor(.tapelabLight)
-                        .padding(12)
-                        .background(TapelabTheme.Colors.surface)
-                        .cornerRadius(8)
-                        .focused($isTextFieldFocused)
                 }
                 .padding(.horizontal, 20)
 

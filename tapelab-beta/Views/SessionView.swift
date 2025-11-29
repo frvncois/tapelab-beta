@@ -11,7 +11,7 @@ import Lottie
 struct SessionView: View {
     @ObservedObject var runtime: AudioRuntime
     @Binding var selectedTab: DashboardView.Tab
-    @State private var armedTrack: Int = 1 // Track 1 is armed by default
+    @State private var armedTrack: Int = 1
     @State private var showMenu = false
     @State private var showInfoSheet = false
     @State private var editedTitle = ""
@@ -23,7 +23,11 @@ struct SessionView: View {
     @State private var importFileItem: ImportFileItem?
     @State private var isExporting = false
     @State private var showDeleteConfirmation = false
+    @State private var showMixLimitAlert = false
+    @State private var isProUser = false  // TODO: Connect to actual Pro subscription status
     @Environment(\.dismiss) var dismiss
+
+    private let maxFreeMixes = 4
 
     // Import file item wrapper for atomic state management
     struct ImportFileItem: Identifiable {
@@ -33,30 +37,24 @@ struct SessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Custom Header
             ZStack {
-                // Session info (title + timestamp) - absolutely centered
                 VStack(alignment: .center, spacing: 2) {
-                    // Tappable title
                     Button(action: {
                         editedTitle = runtime.session.name
                         sessionCoverImage = FileStore.loadSessionCover(runtime.session.id)
                         showInfoSheet = true
                     }) {
-                        Text(runtime.session.name)
+                        Text(String(runtime.session.name.prefix(16)))
                             .font(.tapelabMonoHeadline)
                             .lineLimit(1)
                             .foregroundColor(.tapelabLight)
                     }
 
-                    // Observe timeline directly to get real-time playhead updates
                     PlayheadTimeText(timeline: runtime.timeline)
                 }
                 .frame(maxWidth: .infinity)
 
-                // Buttons overlay on left and right
                 HStack(spacing: 12) {
-                    // Back button
                     Button(action: {
                         dismiss()
                     }) {
@@ -75,24 +73,17 @@ struct SessionView: View {
 
                     Spacer()
 
-                    // Menu button
                     Menu {
-                    Button(action: {
+                            Button(action: {
                         showFileImporter = true
                     }) {
                         Label("Import Audio", systemImage: "square.and.arrow.down")
                     }
 
                     Button(action: {
-                        // TODO: Export track functionality
-                    }) {
-                        Label("Export Track", systemImage: "square.and.arrow.up")
-                    }
-
-                    Button(action: {
                         exportSession()
                     }) {
-                        Label("Export Session", systemImage: "square.and.arrow.up.on.square")
+                        Label("Bounce Session", systemImage: "square.and.arrow.up.on.square")
                     }
 
                     Divider()
@@ -132,7 +123,7 @@ struct SessionView: View {
             Divider()
 
             // Transport controls at bottom
-            TransportView(runtime: runtime, armedTrack: armedTrack)
+            TransportView(runtime: runtime, armedTrack: armedTrack, onBounce: exportSession)
         }
         .background(Color.tapelabBackground)
         .navigationBarHidden(true)
@@ -219,27 +210,39 @@ struct SessionView: View {
         } message: {
             Text("Are you sure you want to delete this session? This cannot be undone.")
         }
+        .alert(
+            "Mix Limit Reached",
+            isPresented: $showMixLimitAlert
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Free users are limited to \(maxFreeMixes) mixes. Upgrade to 4TRACK Pro for unlimited mixes.")
+        }
+        .alert(
+            runtime.alertTitle,
+            isPresented: $runtime.showAlert
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(runtime.alertMessage)
+        }
         .sheet(isPresented: $showFileImporter) {
             AudioFileImporter(
                 onFileSelected: { url in
-                    print("📱 SessionView: File selected: \(url.lastPathComponent)")
                     showFileImporter = false
 
                     // Small delay to ensure file importer dismisses cleanly
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        print("📱 SessionView: Creating ImportFileItem")
                         importFileItem = ImportFileItem(url: url)
                     }
                 },
                 onCancel: {
-                    print("📱 SessionView: File importer cancelled")
                     showFileImporter = false
                 }
             )
             .ignoresSafeArea()
         }
         .sheet(item: $importFileItem) { item in
-            let _ = print("📱 SessionView: Presenting ImportAudioSheet with file: \(item.url.lastPathComponent)")
 
             ImportAudioSheet(
                 session: $runtime.session,
@@ -256,6 +259,17 @@ struct SessionView: View {
     private func exportSession() {
         Task {
             do {
+                // Check mix limit for free users
+                if !isProUser {
+                    let existingMixes = try FileStore.loadAllMixMetadata()
+                    if existingMixes.count >= maxFreeMixes {
+                        await MainActor.run {
+                            showMixLimitAlert = true
+                        }
+                        return
+                    }
+                }
+
                 // Show bouncing overlay immediately
                 await MainActor.run {
                     isExporting = true
@@ -291,16 +305,14 @@ struct SessionView: View {
                     isExporting = false
                     exportAlertMessage = "Mix saved to Mixes folder"
                     showExportAlert = true
-                    print("✅ Export complete: \(mix.name)")
                 }
 
             } catch let error as SessionBouncer.BounceError {
                 // Handle bounce-specific errors
                 await MainActor.run {
                     isExporting = false
-                    exportAlertMessage = error.localizedDescription ?? "Export failed"
+                    exportAlertMessage = error.localizedDescription
                     showExportAlert = true
-                    print("⚠️ Export failed: \(error)")
                 }
             } catch {
                 // Handle other errors
@@ -308,7 +320,6 @@ struct SessionView: View {
                     isExporting = false
                     exportAlertMessage = "Export failed: \(error.localizedDescription)"
                     showExportAlert = true
-                    print("⚠️ Export failed: \(error)")
                 }
             }
         }
@@ -335,22 +346,21 @@ struct SessionView: View {
         showInfoSheet = false
 
         // Session will auto-save via AudioRuntime's didSet
-        print("💾 Session updated: \(trimmedTitle)")
+
+        // Post notification to reload sessions list (for instant UI updates)
+        NotificationCenter.default.post(name: NSNotification.Name("ReloadSessions"), object: nil)
     }
 
     // Save cover image to disk
     private func saveCoverImage(_ image: UIImage, for sessionID: UUID) {
         guard let jpegData = image.jpegData(compressionQuality: 0.8) else {
-            print("⚠️ Failed to convert image to JPEG")
             return
         }
 
         do {
             let coverURL = FileStore.sessionCoverURL(sessionID)
             try jpegData.write(to: coverURL)
-            print("📷 Saved cover image: \(coverURL.lastPathComponent)")
         } catch {
-            print("⚠️ Failed to save cover image: \(error)")
         }
     }
 
@@ -358,7 +368,6 @@ struct SessionView: View {
     private func deleteSession() {
         do {
             try FileStore.deleteSession(runtime.session.id)
-            print("🗑️ Deleted session: \(runtime.session.name)")
 
             // Post notification to reload sessions list
             NotificationCenter.default.post(name: NSNotification.Name("ReloadSessions"), object: nil)
@@ -366,7 +375,6 @@ struct SessionView: View {
             // Dismiss back to dashboard
             dismiss()
         } catch {
-            print("⚠️ Failed to delete session: \(error)")
             // TODO: Show error alert to user
         }
     }

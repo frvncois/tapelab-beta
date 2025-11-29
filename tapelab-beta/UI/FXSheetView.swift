@@ -22,9 +22,7 @@ struct FXSheetView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // REVERB Section
                         VStack(alignment: .leading, spacing: 12) {
-                            // Section header with dot
                             HStack(spacing: 8) {
                                 Circle()
                                     .fill(Color.tapelabLight)
@@ -36,15 +34,14 @@ struct FXSheetView: View {
                             }
 
                             VStack(spacing: 16) {
-                                // Mix control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("MIX")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(String(format: "%.0f%%", track.fx.reverb.wetMix))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -58,36 +55,10 @@ struct FXSheetView: View {
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
-
-                                // Room Size control
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("ROOM SIZE")
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabLight)
-                                        Spacer()
-                                        Text(track.fx.reverb.roomSize ? "LARGE HALL" : "SMALL ROOM")
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabAccentFull)
-                                    }
-                                    Toggle("", isOn: Binding(
-                                        get: { track.fx.reverb.roomSize },
-                                        set: { newValue in
-                                            track.fx.reverb.roomSize = newValue
-                                            applyFXUpdate()
-                                            HapticsManager.shared.effectToggled()
-                                        }
-                                    ))
-                                    .labelsHidden()
-                                    .tint(.tapelabAccentFull)
-                                }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
                             }
+                            .padding(16)
+                            .background(TapelabTheme.Colors.surface)
+                            .cornerRadius(8)
                         }
 
                         // DELAY Section
@@ -103,16 +74,17 @@ struct FXSheetView: View {
                                     .foregroundColor(.tapelabLight)
                             }
 
+                            // All delay controls in one box
                             VStack(spacing: 16) {
                                 // Mix control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("MIX")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(String(format: "%.0f%%", track.fx.delay.wetMix))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -126,19 +98,16 @@ struct FXSheetView: View {
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
 
                                 // Time control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("TIME")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(String(format: "%.2f S", track.fx.delay.time))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -152,19 +121,16 @@ struct FXSheetView: View {
                                     ), in: 0.01...2.0, step: 0.01)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
 
                                 // Feedback control
                                 VStack(alignment: .leading, spacing: 8) {
                                     HStack {
                                         Text("FEEDBACK")
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
                                         Spacer()
                                         Text(String(format: "%.0f%%", track.fx.delay.feedback))
-                                            .font(.tapelabMono)
+                                            .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabAccentFull)
                                             .monospacedDigit()
                                     }
@@ -178,78 +144,29 @@ struct FXSheetView: View {
                                     ), in: 0...100, step: 1)
                                     .accentColor(.tapelabAccentFull)
                                 }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
                             }
+                            .padding(16)
+                            .background(TapelabTheme.Colors.surface)
+                            .cornerRadius(8)
                         }
 
-                        // SATURATION Section
-                        VStack(alignment: .leading, spacing: 12) {
-                            // Section header with dot
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(Color.tapelabLight)
-                                    .frame(width: 3, height: 3)
-
-                                Text("SATURATION")
+                        // Reset Button
+                        Button(action: {
+                            track.fx.resetFX()
+                            applyFXUpdate()
+                            HapticsManager.shared.effectToggled()
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 14))
+                                Text("RESET")
                                     .font(.tapelabMonoSmall)
-                                    .foregroundColor(.tapelabLight)
                             }
-
-                            VStack(spacing: 16) {
-                                // Mix control
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("MIX")
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabLight)
-                                        Spacer()
-                                        Text(String(format: "%.0f%%", track.fx.saturation.wetMix))
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabAccentFull)
-                                            .monospacedDigit()
-                                    }
-                                    Slider(value: Binding(
-                                        get: { Double(track.fx.saturation.wetMix) },
-                                        set: { newValue in
-                                            track.fx.saturation.wetMix = Float(newValue)
-                                            applyFXUpdate()
-                                            triggerSliderHaptic()
-                                        }
-                                    ), in: 0...100, step: 1)
-                                    .accentColor(.tapelabAccentFull)
-                                }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
-
-                                // Drive control
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("DRIVE")
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabLight)
-                                        Spacer()
-                                        Text(String(format: "%.1f DB", track.fx.saturation.preGain))
-                                            .font(.tapelabMono)
-                                            .foregroundColor(.tapelabAccentFull)
-                                            .monospacedDigit()
-                                    }
-                                    Slider(value: Binding(
-                                        get: { Double(track.fx.saturation.preGain) },
-                                        set: { newValue in
-                                            track.fx.saturation.preGain = Float(newValue)
-                                            applyFXUpdate()
-                                            triggerSliderHaptic()
-                                        }
-                                    ), in: -40...40, step: 0.5)
-                                    .accentColor(.tapelabAccentFull)
-                                }
-                                .padding(16)
-                                .background(TapelabTheme.Colors.surface)
-                                .cornerRadius(8)
-                            }
+                            .foregroundColor(.tapelabLight)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.tapelabButtonBg)
+                            .cornerRadius(8)
                         }
 
                         Spacer(minLength: 20)
@@ -258,9 +175,13 @@ struct FXSheetView: View {
                     .padding(.vertical, 16)
                 }
             }
-            .navigationTitle("Track \(track.number) FX")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Track \(track.number) FX")
+                        .font(.tapelabMono)
+                        .foregroundColor(.tapelabLight)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         dismiss()

@@ -8,11 +8,10 @@ import Accelerate
 import Foundation
 import QuartzCore
 
-// Debug logging flag - set to false for production
-private let enableDebugLogs = false
-
 @MainActor
 public final class SessionPlayer {
+    // Debug logging flag - set to false for production
+    private nonisolated static let enableDebugLogs = false
     // DEBUG FLAG - Set to true to enable detailed scheduling gap logging
     static let LOG_SCHEDULING_GAPS = true
     
@@ -52,10 +51,8 @@ public final class SessionPlayer {
     /// Set which track is currently recording (to exclude from playback)
     public func setRecordingTrack(_ trackIndex: Int?) {
         recordingTrackIndex = trackIndex
-        if let idx = trackIndex {
-            print("🎙️ Player: Excluding track \(idx + 1) from playback (currently recording)")
+        if let _ = trackIndex {
         } else {
-            print("🎙️ Player: No longer excluding any tracks from playback")
         }
     }
 
@@ -71,59 +68,39 @@ public final class SessionPlayer {
             ec.trackBuses[i].applyFX(track.fx)
         }
 
-        print("🔍 Preloading regions for \(session.tracks.count) tracks...")
         preloadRegions(session)
-        print("✅ Preload complete. Total regions loaded: \(regionBuffers.flatMap { $0.values }.count)")
 
         // CRITICAL: Pre-render ENTIRE regions with all effects applied
         // This eliminates real-time processing during playback
-        print("⚙️ Pre-rendering complete regions (this may take a few seconds)...")
         let renderStart = CACurrentMediaTime()
         await preRenderAllRegions(session: session, sampleRate: ec.sampleRate)
-        let renderDuration = CACurrentMediaTime() - renderStart
-        print("✅ Pre-rendering complete in \(String(format: "%.2f", renderDuration))s. Cached \(preRenderedRegions.count) regions")
+        let _ = CACurrentMediaTime() - renderStart
 
         // Diagnostic: Check audio engine and output state BEFORE reset
-        print("🔬 PRE-RESET: Engine running=\(ec.engine.isRunning)")
-        if let output = ec.engine.outputNode.engine {
-            print("🔬 PRE-RESET: Output node connected to engine=\(output === ec.engine)")
+        if let _ = ec.engine.outputNode.engine {
         }
-        print("🔬 PRE-RESET: Main mixer output format: \(ec.mainMixer.outputFormat(forBus: 0))")
 
         // Start players & anchor clock
         // CRITICAL: NEVER call .reset() - it breaks Bluetooth A2DP audio routing on iOS
         // Simply stop/play is sufficient to reschedule new buffers
-        for (i, bus) in ec.trackBuses.enumerated() {
-            print("🔬 Track \(i+1) PRE-START: Player isPlaying=\(bus.player.isPlaying)")
+        for (_, bus) in ec.trackBuses.enumerated() {
             bus.player.stop()
             bus.player.play()
-            print("🔬 Track \(i+1) POST-START: Player isPlaying=\(bus.player.isPlaying)")
         }
 
         // Diagnostic: Check audio engine and output state AFTER reset
-        print("🔬 POST-RESET: Engine running=\(ec.engine.isRunning)")
-        if let output = ec.engine.outputNode.engine {
-            print("🔬 POST-RESET: Output node connected to engine=\(output === ec.engine)")
+        if let _ = ec.engine.outputNode.engine {
         }
-        print("🔬 POST-RESET: Main mixer output format: \(ec.mainMixer.outputFormat(forBus: 0))")
 
         // Verify all connections are still valid
-        for (i, bus) in ec.trackBuses.enumerated() {
-            if let playerEngine = bus.player.engine {
-                print("🔬 Track \(i+1): Player connected to engine=\(playerEngine === ec.engine)")
+        for (_, bus) in ec.trackBuses.enumerated() {
+            if let _ = bus.player.engine {
             } else {
-                print("⚠️ Track \(i+1): Player NOT connected to engine!")
             }
             // Check volume levels
-            print("🔬 Track \(i+1): Mixer volume=\(bus.mixer.outputVolume), pan=\(bus.mixer.pan)")
         }
 
         // Check main mixer and output routing
-        print("🔬 Main mixer volume=\(ec.mainMixer.outputVolume)")
-        print("🔬 Audio session route: \(AVAudioSession.sharedInstance().currentRoute)")
-        print("🔬 Audio session output: \(AVAudioSession.sharedInstance().currentRoute.outputs.first?.portName ?? "unknown")")
-        print("🔬 Audio session category: \(AVAudioSession.sharedInstance().category)")
-        print("🔬 Audio session active: \(AVAudioSession.sharedInstance().isOtherAudioPlaying)")
 
         // Give the player a moment to stabilize before getting render time
         try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
@@ -131,10 +108,8 @@ public final class SessionPlayer {
         if let nodeTime = ec.trackBuses.first?.player.lastRenderTime,
            let playerTime = ec.trackBuses.first?.player.playerTime(forNodeTime: nodeTime) {
             basePlayerSampleTime = playerTime.sampleTime
-            print("🎯 Anchor: playerSampleTime=\(basePlayerSampleTime)")
         } else {
             basePlayerSampleTime = 0
-            print("⚠️ Could not get player time, using 0")
         }
         baseWallTime = CACurrentMediaTime()
         basePlayhead = timeline.playhead
@@ -143,7 +118,6 @@ public final class SessionPlayer {
         maxScheduledTime = [0, 0, 0, 0]
         lastScheduledEndTime = [0, 0, 0, 0]
         lastScheduledPlayerSample = [0, 0, 0, 0]
-        print("🔄 Reset scheduling tracking for new playback session")
 
         isPlaying = true
         scheduleWindow()
@@ -162,8 +136,7 @@ public final class SessionPlayer {
 
                 // Loop mode detection
                 if tl.isLoopMode, tl.playhead >= tl.loopEnd - 0.002 {
-                    if enableDebugLogs {
-                        print("🔁 SessionPlayer: Loop detected at \(String(format: "%.2f", tl.playhead))s, resetting to \(tl.loopStart)s")
+                    if SessionPlayer.enableDebugLogs {
                     }
                     self.resetClockForNextLoopPass()
                     // CRITICAL: Offload to detached task to avoid blocking this loop
@@ -191,21 +164,18 @@ public final class SessionPlayer {
                             let scheduleEndTime = CACurrentMediaTime()
                             let scheduleDuration = scheduleEndTime - scheduleStartTime
                             // Log if scheduling takes longer than expected
-                            if enableDebugLogs && scheduleDuration > 0.05 {
-                                print("⚠️ SLOW SCHEDULING: took \(String(format: "%.1f", scheduleDuration * 1000))ms (should be <50ms)")
+                            if SessionPlayer.enableDebugLogs && scheduleDuration > 0.05 {
                             }
                             await MainActor.run { schedulingInProgress = false }
                         }
                         lastScheduleTime = now
                     } else {
-                        if enableDebugLogs {
-                            print("⚠️ Skipping schedule window - previous scheduling still in progress")
+                        if SessionPlayer.enableDebugLogs {
                         }
                     }
                 }
             }
         }
-        print("▶️ Playback started @ \(timeline.playhead)s")
     }
 
     public func stop() {
@@ -220,7 +190,6 @@ public final class SessionPlayer {
         lastScheduledPlayerSample = [0, 0, 0, 0]
 
         timeline?.stopTimeline()
-        print("🛑 Playback stopped")
     }
 
     /// Get the audio buffer for a specific region (for waveform visualization)
@@ -236,7 +205,6 @@ public final class SessionPlayer {
         }
 
         guard trackIndex >= 0 && trackIndex < regionBuffers.count else {
-            print("⚠️ SessionPlayer.getRegionBuffer: Invalid track index \(trackIndex)")
             return nil
         }
 
@@ -247,17 +215,14 @@ public final class SessionPlayer {
 
         // Buffer not loaded - load it on-demand for waveform display
         guard trackIndex < session.tracks.count else {
-            print("⚠️ SessionPlayer.getRegionBuffer: Track index out of range")
             return nil
         }
 
         // Find the region
         guard let region = session.tracks[trackIndex].regions.first(where: { $0.id.id == regionID }) else {
-            print("⚠️ SessionPlayer.getRegionBuffer: Region not found - \(regionID)")
             return nil
         }
 
-        print("📊 Loading buffer on-demand for waveform: \(region.sourceURL.lastPathComponent)")
 
         do {
             let file = try AVAudioFile(forReading: region.sourceURL)
@@ -265,7 +230,6 @@ public final class SessionPlayer {
             // Read entire file (not just the region portion) for full waveform
             let totalFrames = AVAudioFrameCount(file.length)
             guard totalFrames > 0 else {
-                print("⚠️ File has 0 frames")
                 return nil
             }
 
@@ -277,14 +241,11 @@ public final class SessionPlayer {
             if let mono = convertToMonoIfNeeded(buffer: buf, targetSampleRate: engineController?.sampleRate ?? 48000) {
                 // Cache it for future use
                 regionBuffers[trackIndex][regionID] = mono
-                print("✅ Loaded and cached: \(mono.frameLength) frames")
                 return mono
             } else {
-                print("⚠️ Conversion to mono failed")
                 return nil
             }
         } catch {
-            print("⚠️ Failed to load buffer: \(error)")
             return nil
         }
     }
@@ -305,16 +266,17 @@ public final class SessionPlayer {
             for region in track.regions {
                 // Get source buffer (already loaded in preloadRegions)
                 guard let sourceBuffer = regionBuffers[tIndex][region.id.id] else {
-                    print("⚠️ Pre-render: No buffer for region \(region.id.id) on track \(tIndex + 1)")
                     continue
                 }
 
                 // Render the ENTIRE region with all effects applied at once
                 // No chunks, no complexity, just the whole thing
+                // NOTE: sourceBuffer already has fileStartOffset applied from preloadRegions,
+                // so we pass offsetSeconds: 0 here to avoid double-skipping
                 if let renderedRegion = makeSegment(
                     from: sourceBuffer,
                     sampleRate: sampleRate,
-                    offsetSeconds: region.fileStartOffset,
+                    offsetSeconds: 0,  // Already applied in preloadRegions
                     durationSeconds: region.duration,
                     reversed: region.reversed,
                     fadeIn: region.fadeIn ?? 0,
@@ -326,7 +288,6 @@ public final class SessionPlayer {
                     preRenderedRegions[key] = renderedRegion
 
                     if tIndex == 0 || tIndex == 1 { // Only log first two tracks to reduce spam
-                        print("   ✅ Pre-rendered: Track \(tIndex + 1), region \(region.sourceURL.lastPathComponent), \(renderedRegion.frameLength) frames (\(String(format: "%.2f", region.duration))s)")
                     }
                 }
             }
@@ -336,7 +297,6 @@ public final class SessionPlayer {
     // MARK: - Scheduling
     private func scheduleWindow() {
         guard let ec = engineController, let session, let tl = timeline else {
-            print("⚠️ scheduleWindow: Missing dependencies")
             return
         }
         let sr = ec.sampleRate
@@ -360,7 +320,6 @@ public final class SessionPlayer {
             windowEnd = min(tl.playhead + lookaheadDuration, session.maxDuration)
         }
 
-        print("📅 scheduleWindow: loopMode=\(tl.isLoopMode), window=[\(String(format: "%.3f", windowStart))s, \(String(format: "%.3f", windowEnd))s], playhead=\(String(format: "%.3f", tl.playhead))s, lookahead=\(String(format: "%.3f", windowEnd - windowStart))s")
 
         let scheduleLead: TimeInterval = 0.08
         let anchorNow = CACurrentMediaTime()
@@ -370,20 +329,16 @@ public final class SessionPlayer {
         for (tIndex, track) in session.tracks.enumerated() where tIndex < ec.trackBuses.count {
             // Skip scheduling the track that's currently being recorded
             if let recordingIdx = recordingTrackIndex, tIndex == recordingIdx {
-                print("🎚️ Track \(tIndex + 1): SKIPPED (currently recording)")
                 continue
             }
 
             let bus = ec.trackBuses[tIndex]
 
-            print("🎚️ Track \(tIndex + 1): \(track.regions.count) regions")
 
             for region in track.regions {
                 let rStart = region.startTime
                 let rEnd   = region.startTime + region.duration
-                print("   📍 Region: [\(rStart)s, \(rEnd)s], file: \(region.sourceURL.lastPathComponent)")
                 if rEnd <= windowStart || rStart >= windowEnd {
-                    print("   ⏭️ Skipped (outside window)")
                     continue
                 }
 
@@ -391,7 +346,6 @@ public final class SessionPlayer {
                 // This prevents overlaps when scheduleWindow() is called repeatedly
                 let maxScheduled = maxScheduledTime[tIndex]
                 if rEnd <= maxScheduled {
-                    print("   ⏭️ Skipped (already scheduled, region ends at \(String(format: "%.3f", rEnd))s, maxScheduled=\(String(format: "%.3f", maxScheduled))s)")
                     continue
                 }
 
@@ -402,19 +356,16 @@ public final class SessionPlayer {
                 let segEnd   = min(rEnd,   windowEnd)
                 let segDur   = max(0, segEnd - segStart)
                 guard segDur > 0 else {
-                    print("   ⏭️ Skipped (segment duration = 0 after overlap prevention)")
                     continue
                 }
 
                 // Calculate offset into the pre-rendered region
                 let offsetIntoRegion = segStart - rStart
                 
-                print("   🎬 Extracting from pre-rendered: offset=\(String(format: "%.3f", offsetIntoRegion))s, duration=\(String(format: "%.3f", segDur))s")
 
                 // Get the pre-rendered ENTIRE region (already has all effects applied)
                 let regionKey = "\(tIndex)-\(region.id.id)"
                 guard let preRenderedRegion = preRenderedRegions[regionKey] else {
-                    print("   ⚠️ No pre-rendered region found for key: \(regionKey)")
                     continue
                 }
 
@@ -423,11 +374,9 @@ public final class SessionPlayer {
                 let frameCount = Int(segDur * sr)
                 
                 guard let slice = extractFrames(from: preRenderedRegion, offset: frameOffset, count: frameCount) else {
-                    print("   ⚠️ Failed to extract frames from pre-rendered region")
                     continue
                 }
                 
-                print("   🚀 Using pre-rendered region (FAST PATH - no real-time processing)")
 
                 // CRITICAL FIX: Use contiguous scheduling to eliminate gaps between buffers
                 // If we've already scheduled a buffer on this track in this window,
@@ -436,33 +385,27 @@ public final class SessionPlayer {
                 if lastScheduledPlayerSample[tIndex] > 0 {
                     // Schedule immediately after the previous buffer
                     scheduleAtPlayerSamples = lastScheduledPlayerSample[tIndex]
-                    print("   🔗 Contiguous scheduling: following previous buffer at sample \(scheduleAtPlayerSamples)")
                 } else {
                     // First buffer in this window - use calculated time with lead
                     let deltaFromPlayhead = segStart - tl.playhead
                     scheduleAtPlayerSamples = playerSampleNow
                         + AVAudioFramePosition((scheduleLead + deltaFromPlayhead) * sr)
-                    print("   🎯 First buffer: deltaFromPlayhead=\(String(format: "%.3f", deltaFromPlayhead))s, at player sample \(scheduleAtPlayerSamples)")
                 }
 
                 let atTime = AVAudioTime(sampleTime: scheduleAtPlayerSamples, atRate: sr)
 
                 // Check buffer audio level before scheduling
-                let bufferPeak = slice.peakLevel()
-                print("   🔊 Buffer peak level: \(String(format: "%.3f", bufferPeak)) (\(String(format: "%.1f", 20 * log10(bufferPeak))) dB)")
+                let _ = slice.peakLevel()
 
                 // The buffer format must match the player's input connection format (mono processingFormat)
                 // The audio graph handles mono->stereo conversion at the mixer nodes automatically
                 bus.player.scheduleBuffer(slice, at: atTime, options: [])
-                print("   ✅ Scheduled: segment[\(segStart)s, \(segEnd)s], \(slice.frameLength) frames at player sample \(scheduleAtPlayerSamples)")
 
                 // Update last scheduled player sample for contiguous scheduling
                 lastScheduledPlayerSample[tIndex] = scheduleAtPlayerSamples + AVAudioFramePosition(slice.frameLength)
-                print("   📍 Next buffer for Track \(tIndex + 1) will start at player sample \(lastScheduledPlayerSample[tIndex])")
 
                 // Update max scheduled time for this track to prevent future overlaps
                 maxScheduledTime[tIndex] = max(maxScheduledTime[tIndex], segEnd)
-                print("   📊 Track \(tIndex + 1) maxScheduled updated to \(String(format: "%.3f", maxScheduledTime[tIndex]))s")
 
                 // Gap detection logging
                 if Self.LOG_SCHEDULING_GAPS {
@@ -471,9 +414,7 @@ public final class SessionPlayer {
                         let gap = segStart - previousEnd
                         if abs(gap) > 0.001 { // More than 1ms difference
                             if gap > 0 {
-                                print("   ⚠️  SCHEDULING GAP: \(String(format: "%.3f", gap * 1000))ms between \(String(format: "%.3f", previousEnd))s and \(String(format: "%.3f", segStart))s")
                             } else {
-                                print("   ⚠️  SCHEDULING OVERLAP: \(String(format: "%.3f", -gap * 1000))ms (previous ended at \(String(format: "%.3f", previousEnd))s, current starts at \(String(format: "%.3f", segStart))s)")
                             }
                         }
                     }
@@ -512,19 +453,15 @@ public final class SessionPlayer {
         for (i, track) in session.tracks.enumerated() {
             // Skip preloading the track that's currently being recorded
             if let recordingIdx = recordingTrackIndex, i == recordingIdx {
-                print("   🎚️ Track \(i + 1): SKIPPED (currently recording)")
                 continue
             }
-            print("   🎚️ Track \(i + 1): \(track.regions.count) regions to load")
             for region in track.regions {
-                print("      📁 Loading: \(region.sourceURL.lastPathComponent)")
                 do {
                     let file = try AVAudioFile(forReading: region.sourceURL)
                     let sr = file.processingFormat.sampleRate
                     let startFrame = AVAudioFramePosition(region.fileStartOffset * sr)
                     let frames = AVAudioFrameCount(region.duration * sr)
                     guard frames > 0 else {
-                        print("      ⚠️ Skipped (0 frames)")
                         continue
                     }
                     file.framePosition = startFrame
@@ -534,12 +471,9 @@ public final class SessionPlayer {
                     buf.frameLength = frames
                     if let mono = convertToMonoIfNeeded(buffer: buf, targetSampleRate: ec.sampleRate) {
                         regionBuffers[i][region.id.id] = mono
-                        print("      ✅ Loaded: \(mono.frameLength) frames")
                     } else {
-                        print("      ⚠️ Skipping region due to conversion failure")
                     }
                 } catch {
-                    print("      ⚠️ Preload failed \(region.sourceURL.lastPathComponent): \(error)")
                 }
             }
         }
@@ -652,7 +586,6 @@ public final class SessionPlayer {
         if buffer.format.channelCount == 1 && buffer.format.sampleRate == targetSampleRate { return buffer }
         guard let monoFmt = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: 1),
               let out = AVAudioPCMBuffer(pcmFormat: monoFmt, frameCapacity: buffer.frameLength) else {
-            print("⚠️ Failed to create mono buffer")
             return nil
         }
         out.frameLength = buffer.frameLength

@@ -318,39 +318,31 @@ struct AudioTestView: View {
                                 trackNumber: track.number,
                                 regionIndex: regionIndex,
                                 onConfirm: {
-                                    print("🔧 Region confirmed - refreshing playback")
                                     
                                     let wasPlaying = runtime.timeline.isPlaying
-                                    print("   📊 State: wasPlaying=\(wasPlaying)")
                                     
                                     // Just stop the high-level player/timeline
                                     // Let SessionPlayer.play() handle the node reset
                                     if wasPlaying {
                                         runtime.player.stop()
                                         runtime.timeline.stopTimeline()
-                                        print("   ⏸️ Stopped playback")
                                     }
                                     
                                     // Restart - SessionPlayer.play() will handle node reset properly
                                     if wasPlaying {
                                         Task { @MainActor in
                                             do {
-                                                print("   🚀 Restarting playback...")
                                                 try await runtime.player.play(
                                                     session: runtime.session,
                                                     timeline: runtime.timeline
                                                 )
-                                                print("   ✅ Playback restarted")
                                             } catch {
-                                                print("   ⚠️ Failed: \(error)")
                                             }
                                         }
                                     } else {
-                                        print("   ℹ️ Was not playing - changes will apply on next Play")
                                     }
                                     
                                     runtime.objectWillChange.send()
-                                    print("   ✅ Region update complete")
                                 }
                             )
                         }
@@ -821,25 +813,20 @@ struct RegionDebugView: View {
         editingDuration = region.duration
         editingFileStartOffset = region.fileStartOffset
         hasUnsavedChanges = false
-        print("🔄 Changes cancelled")
     }
     
     private func applyChanges() {
-        let oldStartTime = region.startTime
-        let oldDuration = region.duration
-        let oldFileStartOffset = region.fileStartOffset
-        
+        let _ = region.startTime
+        let _ = region.duration
+        let _ = region.fileStartOffset
+
         region.startTime = editingStartTime
         region.duration = editingDuration
         region.fileStartOffset = editingFileStartOffset
-        
+
         hasUnsavedChanges = false
-        
-        print("✅ Applied changes:")
-        print("   StartTime: \(oldStartTime) → \(region.startTime)")
-        print("   Duration: \(oldDuration) → \(region.duration)")
-        print("   FileStartOffset: \(oldFileStartOffset) → \(region.fileStartOffset)")
-        
+
+
         onConfirm()
     }
 }

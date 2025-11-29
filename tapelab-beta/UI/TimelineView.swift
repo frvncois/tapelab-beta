@@ -46,9 +46,7 @@ struct TimelineView: View {
                                 TimelineRulerView(
                                     timeline: timeline,
                                     pixelsPerSecond: pixelsPerSecond,
-                                    maxDuration: maxDuration,
-                                    bpm: runtime.session.bpm,
-                                    timelineMode: runtime.session.timelineMode
+                                    maxDuration: maxDuration
                                 )
                                 .frame(width: totalWidth, height: rulerHeight)
                                 .background(Color.tapelabBlack)
@@ -69,26 +67,13 @@ struct TimelineView: View {
                                     }
                                     .frame(height: 1)
 
-                                    // Background grid (beat-based or seconds-based)
-                                    if runtime.session.timelineMode == .bpm, let bpm = runtime.session.bpm {
-                                        // BPM mode - grid shows beats
-                                        let totalBeats = Int(ceil((maxDuration / 60.0) * bpm))
-                                        ForEach(0...totalBeats, id: \.self) { beat in
-                                            let beatTime = (Double(beat) / bpm) * 60.0
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.2))
-                                                .frame(width: 1, height: availableHeight)
-                                                .offset(x: CGFloat(beatTime) * pixelsPerSecond, y: 0)
-                                        }
-                                    } else {
-                                        // Seconds mode - grid shows seconds
-                                        let totalSeconds = Int(ceil(maxDuration))
-                                        ForEach(0...totalSeconds, id: \.self) { second in
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.2))
-                                                .frame(width: 1, height: availableHeight)
-                                                .offset(x: CGFloat(second) * pixelsPerSecond, y: 0)
-                                        }
+                                    // Background grid (seconds-based)
+                                    let totalSeconds = Int(ceil(maxDuration))
+                                    ForEach(0...totalSeconds, id: \.self) { second in
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(width: 1, height: availableHeight)
+                                            .offset(x: CGFloat(second) * pixelsPerSecond, y: 0)
                                     }
 
                                     // Track lanes content (no headers in scrollable area)
@@ -112,9 +97,8 @@ struct TimelineView: View {
                         }
                         .onChange(of: timeline.playhead) { oldValue, newValue in
                             // Always auto-scroll to keep playhead centered
-                            withAnimation(.linear(duration: 0.05)) {
-                                scrollProxy.scrollTo("playhead", anchor: .center)
-                            }
+                            // No animation - follow CADisplayLink updates directly for smoothness
+                            scrollProxy.scrollTo("playhead", anchor: .center)
                         }
                     }
                     .simultaneousGesture(
@@ -245,7 +229,10 @@ struct TimelineView: View {
             // Active recording overlay (if recording on this track)
             if let activeRecording = runtime.recorder.activeRecording,
                activeRecording.trackIndex == index {
-                let recordingWidth = max(CGFloat(activeRecording.duration) * pixelsPerSecond, 40)
+                // Use playhead position for smooth animation (updated at 60fps via CADisplayLink)
+                // instead of activeRecording.duration which updates in chunks
+                let recordingDuration = max(0, timeline.playhead - activeRecording.startTime)
+                let recordingWidth = max(CGFloat(recordingDuration) * pixelsPerSecond, 40)
                 ZStack(alignment: .topLeading) {
                     Rectangle()
                         .fill(Color.red.opacity(0.3))
@@ -259,7 +246,6 @@ struct TimelineView: View {
                     width: recordingWidth,
                     height: 60
                 )
-                .animation(.linear(duration: 0.016), value: recordingWidth) // Smooth 60fps animation
                 .position(
                     x: CGFloat(activeRecording.startTime) * pixelsPerSecond + (recordingWidth / 2),
                     y: 58 + 30  // 58pt top offset (matching RegionView) + 30pt (half of 60pt height)

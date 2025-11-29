@@ -49,11 +49,9 @@ struct MixesListView: View {
         .onChange(of: selectedMix) { oldValue, newValue in
             if newValue != nil {
                 // Suspend engine BEFORE presenting PlayerView
-                print("🎵 MixesListView: Suspending engine for PlayerView")
                 runtime.suspendForExternalPlayback()
             } else if oldValue != nil && newValue == nil {
                 // Resume engine AFTER PlayerView dismisses
-                print("🎵 MixesListView: Resuming engine after PlayerView")
                 runtime.resumeAfterExternalPlayback()
             }
         }
@@ -186,16 +184,14 @@ struct MixesListView: View {
         .scrollContentBackground(.hidden)
         .background(TapelabTheme.Colors.background)
         .environment(\.editMode, .constant(.inactive))
-        .accentColor(Color(red: 1.0, green: 0.231, blue: 0.188)) // iOS system red for delete
+        .tint(Color.tapelabRed) // Use theme red for delete button
     }
 
     private func loadMixes() {
         do {
             mixMetadata = try FileStore.loadAllMixMetadata()
             sortMixes()
-            print("📂 Loaded \(mixMetadata.count) mixes")
         } catch {
-            print("⚠️ Failed to load mix metadata: \(error)")
             mixMetadata = []
         }
     }
@@ -214,15 +210,10 @@ struct MixesListView: View {
     }
 
     private func openMix(_ mixID: UUID) {
-        print("🔍 Opening mix with ID: \(mixID)")
         do {
             let mix = try FileStore.loadMix(mixID)
-            print("✅ Loaded mix: \(mix.name)")
-            print("🔍 Mix file URL: \(mix.fileURL)")
             selectedMix = mix  // This will trigger fullScreenCover
-            print("🔍 selectedMix set, fullScreenCover should present")
         } catch {
-            print("⚠️ Failed to load mix: \(error)")
         }
     }
 
@@ -232,9 +223,7 @@ struct MixesListView: View {
 
             do {
                 try FileStore.deleteMix(metadata.id)
-                print("🗑️ Deleted mix: \(metadata.name)")
             } catch {
-                print("⚠️ Failed to delete mix: \(error)")
             }
         }
 

@@ -41,7 +41,6 @@ public final class HapticsManager {
 
     /// Called when play button is pressed
     public func playPressed() {
-        print("🎮 Haptic: Play pressed")
         impactMedium.impactOccurred(intensity: 0.7)
         impactMedium.prepare()
     }
@@ -68,7 +67,6 @@ public final class HapticsManager {
 
     /// Called when a track is selected
     public func trackSelected() {
-        print("🎮 Haptic: Track selected")
         selection.selectionChanged()
         selection.prepare()
     }
@@ -133,7 +131,6 @@ public final class HapticsManager {
 
     /// Called when an effect slider is adjusted
     public func sliderAdjusted() {
-        print("🎮 Haptic: Slider adjusted")
         impactLight.impactOccurred(intensity: 0.2)
         impactLight.prepare()
     }
