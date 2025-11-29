@@ -6,9 +6,6 @@ import Foundation
 import Combine
 import QuartzCore
 
-// Debug logging flag - set to false for production
-private let enableDebugLogs = false
-
 // MARK: - RegionID
 public struct RegionID: Codable, Hashable, Identifiable {
     public let id: UUID
@@ -156,6 +153,12 @@ public final class TimelineState: ObservableObject {
 
     public init() {}
 
+    deinit {
+        // Ensure CADisplayLink is properly cleaned up to prevent memory leaks
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
     public func startTimeline(session: Session) {
         self.session = session
         isPlaying = true
@@ -193,23 +196,13 @@ public final class TimelineState: ObservableObject {
     
     @objc private func updatePlayhead() {
         // Update playhead during both playback AND recording
-        guard isPlaying || isRecording else {
-            if enableDebugLogs {
-            }
-            return
-        }
+        guard isPlaying || isRecording else { return }
 
         let currentTime = CACurrentMediaTime()
         let elapsed = currentTime - playbackStartTime
 
         // Calculate new playhead position
-        let newPlayhead = playbackStartPlayhead + elapsed
-
-        // Debug: Log first few updates (disabled for performance)
-        if enableDebugLogs && (lastUpdateTime == 0 || Int(playhead * 10) != Int(newPlayhead * 10)) {
-        }
-
-        playhead = newPlayhead
+        playhead = playbackStartPlayhead + elapsed
 
         // Handle loop mode (only during playback, not recording)
         // NOTE: We do NOT jump the playhead here anymore

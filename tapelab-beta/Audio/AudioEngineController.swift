@@ -7,9 +7,6 @@ import AVFAudio
 import Foundation
 import Combine
 
-// Debug logging flag - set to false for production
-private let enableDebugLogs = false
-
 @MainActor
 public final class AudioEngineController: ObservableObject {
     // DEBUG FLAGS - Set these to test different configurations
@@ -56,14 +53,16 @@ public final class AudioEngineController: ObservableObject {
             }
         }
 
-        sampleRate = detectedSampleRate
+        // Ensure we have a valid sample rate for format creation
+        let validatedRate = (detectedSampleRate > 0 && detectedSampleRate <= 192000) ? detectedSampleRate : 48000
+        sampleRate = validatedRate
 
-        guard sampleRate > 0 && sampleRate <= 192000 else {
-            fatalError("⚠️ Invalid sample rate: \(sampleRate)Hz - audio system initialization failed")
-        }
-
-        processingFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
-        stereoFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)!
+        // Create audio formats with validated sample rate
+        // AVAudioFormat with standard format and valid rate should always succeed
+        processingFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
+            ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+        stereoFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
+            ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
 
 
         let limiterDesc = AudioComponentDescription(
@@ -166,7 +165,7 @@ public final class AudioEngineController: ObservableObject {
     }
     
     private func setupTracks(count: Int) {
-        for i in 0..<count {
+        for _ in 0..<count {
             let bus = TrackBus()
             engine.attach(bus.player)
             engine.attach(bus.eq)
@@ -207,28 +206,7 @@ public final class AudioEngineController: ObservableObject {
     }
 
     func diagnoseAudioIssues() {
-        guard enableDebugLogs else { return }
-
-        let session = AVAudioSession.sharedInstance()
-
-
-
-        for (i, bus) in trackBuses.enumerated() {
-            let lastRender = bus.player.lastRenderTime?.sampleTime ?? -1
-        }
-
-        // Check for common issues
-        let bufferMs = session.ioBufferDuration * 1000
-        if bufferMs < 8 {
-        }
-
-        if session.sampleRate != session.preferredSampleRate {
-        }
-
-        let outputType = session.currentRoute.outputs.first?.portType
-        if outputType == .bluetoothA2DP || outputType == .bluetoothHFP || outputType == .bluetoothLE {
-        }
-
+        // Debug function - no-op in production
     }
 
     // MARK: - Audio Route Change Handling
@@ -300,9 +278,6 @@ public final class AudioEngineController: ObservableObject {
         guard let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
             return
         }
-
-        let session = AVAudioSession.sharedInstance()
-        let newRoute = session.currentRoute
 
         switch reason {
         case .oldDeviceUnavailable:

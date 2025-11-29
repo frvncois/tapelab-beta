@@ -11,18 +11,24 @@ import UIKit
 public enum FileStore {
     // MARK: - Directory setup
 
+    /// Documents directory - always available on iOS
+    private static var documentsURL: URL {
+        // FileManager.default.urls always returns at least one URL for .documentDirectory on iOS
+        // but we use nil coalescing for defensive coding
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Documents")
+    }
+
     /// Base directory in Documents/Tapelab/Sessions
     public static var sessionsBaseURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let base = docs.appendingPathComponent("Tapelab/Sessions", isDirectory: true)
+        let base = documentsURL.appendingPathComponent("Tapelab/Sessions", isDirectory: true)
         createDirectoryIfNeeded(at: base)
         return base
     }
 
     /// Base directory in Documents/Tapelab/Mixes
     public static var mixesBaseURL: URL {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let base = docs.appendingPathComponent("Tapelab/Mixes", isDirectory: true)
+        let base = documentsURL.appendingPathComponent("Tapelab/Mixes", isDirectory: true)
         createDirectoryIfNeeded(at: base)
         return base
     }

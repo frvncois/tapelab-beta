@@ -367,8 +367,6 @@ public final class AudioRuntime: ObservableObject {
             return
         }
 
-        let region = session.tracks[trackIndex].regions[regionIndex]
-
         // Clear selection state if this region is selected
         if let selected = timeline.selectedRegion,
            selected.trackIndex == trackIndex && selected.regionIndex == regionIndex {
@@ -525,8 +523,6 @@ public final class AudioRuntime: ObservableObject {
 
         // Toggle reversed state
         session.tracks[trackIndex].regions[regionIndex].reversed.toggle()
-        let isReversed = session.tracks[trackIndex].regions[regionIndex].reversed
-
 
         // If playback is active, restart it to reflect the change
         if timeline.isPlaying {

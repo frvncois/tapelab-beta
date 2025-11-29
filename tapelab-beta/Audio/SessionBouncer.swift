@@ -132,13 +132,13 @@ class SessionBouncer {
             // Create output file in Int16 interleaved format - the gold standard for WAV compatibility
             let outputFile: AVAudioFile
 
-            // Create Int16 interleaved format - the most compatible WAV format
-            guard let int16Format = AVAudioFormat(
+            // Validate Int16 interleaved format - the most compatible WAV format
+            guard AVAudioFormat(
                 commonFormat: .pcmFormatInt16,
                 sampleRate: sampleRate,
                 channels: 2,
                 interleaved: true  // CRITICAL: must be interleaved
-            ) else {
+            ) != nil else {
                 throw BounceError.invalidAudioFormat
             }
 

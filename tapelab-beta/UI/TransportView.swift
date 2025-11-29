@@ -180,6 +180,13 @@ struct TransportView: View {
         .padding(.horizontal)
         .padding(.bottom)
         .background(Color.tapelabBlack)
+        .onDisappear {
+            // Clean up any running timers when view disappears
+            rewindTimer?.invalidate()
+            rewindTimer = nil
+            forwardTimer?.invalidate()
+            forwardTimer = nil
+        }
     }
 
     // MARK: - Scrubbing Helper Functions

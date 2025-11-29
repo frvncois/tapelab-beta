@@ -23,14 +23,18 @@ struct SettingsView: View {
                             icon: "info.circle",
                             title: "About 4TRACK",
                             action: {
-                                openURL(URL(string: "https://4track.app")!)
+                                if let url = URL(string: "https://4track.app") {
+                                    openURL(url)
+                                }
                             }
                         )
                         SettingsRowView(
                             icon: "doc.text",
                             title: "Terms of Service",
                             action: {
-                                openURL(URL(string: "https://4track.app/terms")!)
+                                if let url = URL(string: "https://4track.app/terms") {
+                                    openURL(url)
+                                }
                             }
                         )
                         SettingsRowView(
@@ -38,7 +42,9 @@ struct SettingsView: View {
                             title: "Privacy Policy",
                             showSeparator: false,
                             action: {
-                                openURL(URL(string: "https://4track.app/privacy")!)
+                                if let url = URL(string: "https://4track.app/privacy") {
+                                    openURL(url)
+                                }
                             }
                         )
                     }
@@ -80,7 +86,9 @@ struct HelpSupportCard: View {
 
             // Help Center button
             Button(action: {
-                openURL(URL(string: "https://4track.app/help")!)
+                if let url = URL(string: "https://4track.app/help") {
+                    openURL(url)
+                }
             }) {
                 Text("HELP CENTER")
                     .font(.tapelabMonoSmall)

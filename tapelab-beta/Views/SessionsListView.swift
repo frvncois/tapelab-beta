@@ -8,6 +8,16 @@ struct SessionsListView: View {
     @State private var showSessionLimitAlert = false
     @State private var isProUser = false  // TODO: Connect to actual Pro subscription status
 
+    // Edit session state
+    @State private var showEditSheet = false
+    @State private var editingSessionID: UUID?
+    @State private var editingSessionName: String = ""
+    @State private var editingSessionCover: UIImage?
+
+    // Delete confirmation state
+    @State private var showDeleteConfirmation = false
+    @State private var deletingSessionID: UUID?
+
     let onCreateSession: (UUID) -> Void
 
     private let maxFreeSessions = 4
@@ -77,6 +87,35 @@ struct SessionsListView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Free users are limited to \(maxFreeSessions) sessions. Upgrade to 4TRACK Pro for unlimited sessions.")
+        }
+        .alert(
+            "Delete Session",
+            isPresented: $showDeleteConfirmation
+        ) {
+            Button("Cancel", role: .cancel) {
+                deletingSessionID = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let sessionID = deletingSessionID {
+                    deleteSession(sessionID)
+                }
+                deletingSessionID = nil
+            }
+        } message: {
+            Text("Are you sure you want to delete this session? This action cannot be undone.")
+        }
+        .sheet(isPresented: $showEditSheet) {
+            SessionInfoSheet(
+                sessionName: $editingSessionName,
+                coverImage: $editingSessionCover,
+                onSave: {
+                    saveEditedSession()
+                    showEditSheet = false
+                },
+                onCancel: {
+                    showEditSheet = false
+                }
+            )
         }
     }
 
@@ -187,6 +226,28 @@ struct SessionsListView: View {
                         SessionGridItemView(metadata: metadata)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .contextMenu {
+                        Button(action: {
+                            openSession(metadata.id)
+                        }) {
+                            Label("Open Session", systemImage: "play.circle")
+                        }
+
+                        Button(action: {
+                            editSession(metadata)
+                        }) {
+                            Label("Edit Session", systemImage: "pencil")
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive, action: {
+                            deletingSessionID = metadata.id
+                            showDeleteConfirmation = true
+                        }) {
+                            Label("Delete Session", systemImage: "trash")
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -265,6 +326,51 @@ struct SessionsListView: View {
     private func openSession(_ sessionID: UUID) {
         // Open existing session in Studio - DashboardView will load full session
         onCreateSession(sessionID)
+    }
+
+    private func editSession(_ metadata: SessionMetadata) {
+        editingSessionID = metadata.id
+        editingSessionName = metadata.name
+        editingSessionCover = FileStore.loadSessionCover(metadata.id)
+        showEditSheet = true
+    }
+
+    private func saveEditedSession() {
+        guard let sessionID = editingSessionID else { return }
+
+        do {
+            // Load the full session
+            var session = try FileStore.loadSession(sessionID)
+            // Update the name
+            session.name = editingSessionName
+            try FileStore.saveSession(session)
+
+            // Save cover image if changed
+            if let cover = editingSessionCover,
+               let jpegData = cover.jpegData(compressionQuality: 0.8) {
+                let coverURL = FileStore.sessionCoverURL(sessionID)
+                try? jpegData.write(to: coverURL)
+            }
+
+            // Reload sessions list
+            loadSessions()
+
+            // Notify other views
+            NotificationCenter.default.post(name: NSNotification.Name("ReloadSessions"), object: nil)
+        } catch {
+            // Handle error silently for now
+        }
+
+        editingSessionID = nil
+    }
+
+    private func deleteSession(_ sessionID: UUID) {
+        do {
+            try FileStore.deleteSession(sessionID)
+            loadSessions()
+        } catch {
+            // Handle error silently for now
+        }
     }
 
 }

@@ -8,9 +8,6 @@ import Foundation
 import Combine
 import QuartzCore
 
-// Debug logging flag - set to false for production
-private let enableDebugLogs = true
-
 enum RecordingError: LocalizedError {
     case diskSpaceCheckFailed
     case insufficientDiskSpace(availableMB: Int64)
@@ -124,17 +121,7 @@ public final class SessionRecorder: ObservableObject {
 
     /// Measure output latency for overdub alignment compensation
     private func measureOutputLatency() -> TimeInterval {
-        let audioSession = AVAudioSession.sharedInstance()
-
-        let inputLatency = audioSession.inputLatency
-        let outputLatency = audioSession.outputLatency
-        let bufferDuration = audioSession.ioBufferDuration
-
-        if enableDebugLogs {
-            print("🎙️ Latency - input: \(inputLatency * 1000)ms, output: \(outputLatency * 1000)ms, buffer: \(bufferDuration * 1000)ms")
-        }
-
-        return outputLatency
+        return AVAudioSession.sharedInstance().outputLatency
     }
 
     /// Trim frames from the start of an audio file for latency compensation
@@ -147,7 +134,6 @@ public final class SessionRecorder: ObservableObject {
 
         // If trim is longer than file, return minimal file
         guard trimFrames < totalFrames else {
-            print("🎙️ Warning: trim (\(trimSeconds)s) exceeds file length")
             return (sourceURL, 0)
         }
 
@@ -178,8 +164,6 @@ public final class SessionRecorder: ObservableObject {
         // Replace original with trimmed file
         try FileManager.default.removeItem(at: sourceURL)
         try FileManager.default.moveItem(at: trimmedURL, to: sourceURL)
-
-        print("🎙️ Trimmed \(trimSeconds * 1000)ms from start of audio file")
 
         return (sourceURL, trimmedDuration)
     }
@@ -261,7 +245,6 @@ public final class SessionRecorder: ObservableObject {
         // Capture output latency NOW at recording start (for overdub compensation)
         // AVAudioSession latency values can change during recording (especially with Bluetooth)
         recordingOutputLatency = measureOutputLatency()
-        print("🎙️ Recording starting - playhead: \(recordingStartPlayhead)s, overdubbing: \(wasOverdubbing), outputLatency: \(recordingOutputLatency * 1000)ms")
 
         // Create recording file
         let fileURL = FileStore.newRegionURL(session: mutableSession, track: trackIndex)
@@ -332,8 +315,6 @@ public final class SessionRecorder: ObservableObject {
 
             // Initialize activeRecording state for UI on first buffer (NO session access)
             if tapCallCount == 1 {
-                print("🎙️ First buffer arrived - recordingStartPlayhead: \(self.recordingStartPlayhead)s")
-
                 if let regionID = self.currentRecordingRegionID,
                    let trackIdx = self.currentRecordingTrackIndex {
                     Task { @MainActor in
@@ -482,9 +463,6 @@ public final class SessionRecorder: ObservableObject {
         let latencyCompensation = wasOverdubbing ? recordingOutputLatency : 0
         let compensatedStartTime = recordingStartPlayhead - latencyCompensation
 
-        print("🎙️ Recording stopped - file: \(fileDuration)s, overdub: \(wasOverdubbing), compensation: \(latencyCompensation * 1000)ms")
-        print("🎙️ Start time: \(recordingStartPlayhead)s -> compensated: \(compensatedStartTime)s")
-
         let actualStartTime: TimeInterval
         let fileStartOffset: TimeInterval
         let playableDuration: TimeInterval
@@ -505,9 +483,7 @@ public final class SessionRecorder: ObservableObject {
                 fileStartOffset = 0
                 playableDuration = trimmedDuration
 
-                print("🎙️ Trimmed \(trimAmount * 1000)ms for 0:00 alignment")
             } catch {
-                print("🎙️ Error trimming file: \(error), using original")
                 // Fallback: use fileStartOffset approach
                 actualStartTime = 0
                 fileStartOffset = -compensatedStartTime
@@ -529,8 +505,6 @@ public final class SessionRecorder: ObservableObject {
             fileDuration: fileDuration
         )
         session.tracks[trackIndex].regions.append(region)
-
-        print("🎙️ Region created on track \(trackIndex + 1): startTime=\(actualStartTime)s, duration=\(playableDuration)s, fileStartOffset=\(fileStartOffset)s")
     }
     
     // MARK: - Input Monitoring
