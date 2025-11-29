@@ -108,7 +108,7 @@ public struct Session: Codable, Identifiable {
     public var tracks: [Track]
 
     // Non-codable constant - not stored in JSON
-    public let maxDuration: TimeInterval = 6 * 60 // 6 minutes cap
+    public let maxDuration: TimeInterval = 8 * 60 // 8 minutes cap
 
     // Exclude maxDuration from encoding/decoding
     enum CodingKeys: String, CodingKey {
@@ -203,6 +203,16 @@ public final class TimelineState: ObservableObject {
 
         // Calculate new playhead position
         playhead = playbackStartPlayhead + elapsed
+
+        // Check if recording has reached max duration (480 seconds = 8 minutes)
+        if isRecording && playhead >= 480.0 {
+            playhead = 480.0
+            // Post notification to stop recording
+            NotificationCenter.default.post(
+                name: NSNotification.Name("RecordingReachedMaxDuration"),
+                object: nil
+            )
+        }
 
         // Handle loop mode (only during playback, not recording)
         // NOTE: We do NOT jump the playhead here anymore

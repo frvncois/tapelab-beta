@@ -110,6 +110,28 @@ public final class AudioRuntime: ObservableObject {
             }
         }
 
+        // Observe recording reaching max duration (360 seconds)
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("RecordingReachedMaxDuration"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+
+                if self.timeline.isRecording,
+                   let trackIndex = self.recorder.currentRecordingTrackIndex {
+                    self.stopRecording(onTrack: trackIndex)
+                    self.showAlert(
+                        title: "Recording Complete",
+                        message: "Maximum session length (8 minutes) reached. Your recording has been saved."
+                    )
+                }
+            }
+        }
+
     }
 
     // MARK: - Alert Helper
@@ -131,15 +153,17 @@ public final class AudioRuntime: ObservableObject {
             do {
                 try FileStore.saveSession(session)
             } catch {
+                print("⚠️ AudioRuntime: Auto-save session failed: \(error)")
             }
         }
     }
-    
+
     func startPlayback() async {
         do {
             try await player.play(session: session, timeline: timeline)
         }
         catch {
+            print("⚠️ AudioRuntime: Playback failed: \(error)")
         }
     }
     
@@ -148,6 +172,9 @@ public final class AudioRuntime: ObservableObject {
     func stopPlayback(resetPlayhead: Bool = true) {
         player.stop()
         timeline.isPlaying = false
+
+        // Reset effects to clear delay/reverb tails
+        engine.resetAllEffects()
 
         if resetPlayhead {
             timeline.playhead = 0
@@ -554,6 +581,7 @@ public final class AudioRuntime: ObservableObject {
         do {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
+            print("⚠️ AudioRuntime: Audio session deactivation failed: \(error)")
         }
     }
 
@@ -566,13 +594,19 @@ public final class AudioRuntime: ObservableObject {
             try session.setCategory(.playAndRecord, mode: .videoRecording, options: [.allowBluetoothA2DP, .defaultToSpeaker])
             try session.setActive(true)
         } catch {
+            print("⚠️ AudioRuntime: Audio session resume failed: \(error)")
         }
 
         // Restart engine
         do {
             try engine.start()
         } catch {
+            print("⚠️ AudioRuntime: Engine restart failed: \(error)")
         }
 
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }

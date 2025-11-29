@@ -173,7 +173,7 @@ struct FXSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Track \(track.number) FX")
-                        .font(.tapelabMono)
+                        .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {

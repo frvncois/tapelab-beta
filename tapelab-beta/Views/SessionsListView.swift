@@ -421,6 +421,7 @@ struct SessionGridItemView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12))
     }
 
     private func loadCoverImage() {

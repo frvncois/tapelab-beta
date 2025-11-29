@@ -187,6 +187,7 @@ public enum FileStore {
                 let session = try decoder.decode(Session.self, from: data)
                 metadata.append(SessionMetadata(from: session))
             } catch {
+                print("⚠️ FileStore: Failed to decode session metadata: \(error)")
             }
         }
 
@@ -270,6 +271,7 @@ public enum FileStore {
                 let mix = try decoder.decode(Mix.self, from: data)
                 metadata.append(MixMetadata(from: mix))
             } catch {
+                print("⚠️ FileStore: Failed to decode mix metadata: \(error)")
             }
         }
 

@@ -10,7 +10,7 @@ import Foundation
 /// Graph: Player → EQ → Delay → Reverb → Distortion → Mixer
 public final class TrackBus {
     public let player = AVAudioPlayerNode()
-    public let eq = AVAudioUnitEQ(numberOfBands: 4)
+    public let eq = AVAudioUnitEQ(numberOfBands: 2)
     public let delay = AVAudioUnitDelay()
     public let reverb = AVAudioUnitReverb()
     public let dist = AVAudioUnitDistortion()
@@ -32,8 +32,8 @@ public final class TrackBus {
         delay.delayTime = 0.3
         delay.feedback = 0.0
         delay.lowPassCutoff = 18000
-        // Reverb defaults
-        reverb.loadFactoryPreset(.smallRoom)
+        // Reverb defaults - plate sounds more like spring reverb
+        reverb.loadFactoryPreset(.plate)
         reverb.wetDryMix = 0
         // Distortion as saturation
         dist.loadFactoryPreset(.multiBrokenSpeaker)
@@ -42,6 +42,13 @@ public final class TrackBus {
         // Mixer defaults
         mixer.pan = 0.0
         mixer.outputVolume = 1.0
+    }
+
+    /// Reset effects to clear delay/reverb tails
+    public func resetEffects() {
+        // Reset audio units to clear their internal buffers
+        delay.reset()
+        reverb.reset()
     }
 
     /// Apply full FX graph settings from TrackFX
@@ -67,10 +74,9 @@ public final class TrackBus {
         }
         eq.bypass = fx.eqBands.isEmpty
 
-        // Reverb
+        // Reverb - always use plate (spring-like sound)
         reverb.wetDryMix = fx.reverb.wetMix
-        reverb.loadFactoryPreset(fx.reverb.roomSize ? .largeHall : .smallRoom)
-        // NOTE: AVAudioUnitReverb has no direct preDelay param
+        reverb.loadFactoryPreset(.plate)
 
         // Delay
         delay.wetDryMix = fx.delay.wetMix

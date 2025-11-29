@@ -13,7 +13,7 @@ public final class SessionPlayer {
     // Debug logging flag - set to false for production
     private nonisolated static let enableDebugLogs = false
     // DEBUG FLAG - Set to true to enable detailed scheduling gap logging
-    static let LOG_SCHEDULING_GAPS = true
+    static let LOG_SCHEDULING_GAPS = false
     
     public weak var engineController: AudioEngineController?
 
@@ -188,6 +188,10 @@ public final class SessionPlayer {
         maxScheduledTime = [0, 0, 0, 0]
         lastScheduledEndTime = [0, 0, 0, 0]
         lastScheduledPlayerSample = [0, 0, 0, 0]
+
+        // Clear buffer caches to free memory
+        regionBuffers.removeAll()
+        preRenderedRegions.removeAll()
 
         timeline?.stopTimeline()
     }
@@ -472,8 +476,10 @@ public final class SessionPlayer {
                     if let mono = convertToMonoIfNeeded(buffer: buf, targetSampleRate: ec.sampleRate) {
                         regionBuffers[i][region.id.id] = mono
                     } else {
+                        print("⚠️ SessionPlayer: Failed to convert buffer to mono for region \(region.id.id)")
                     }
                 } catch {
+                    print("⚠️ SessionPlayer: Failed to load region \(region.id.id): \(error)")
                 }
             }
         }

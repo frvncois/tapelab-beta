@@ -126,8 +126,8 @@ struct ProPlanCard: View {
 
             // Features List
             VStack(alignment: .leading, spacing: 12) {
-                ProFeatureRow(icon: "infinity", label: "Sessions", value: "Unlimited")
-                ProFeatureRow(icon: "music.note", label: "Mixes", value: "Unlimited")
+                ProFeatureRow(icon: "infinity", label: "SESSIONS", value: "UNLIMITED")
+                ProFeatureRow(icon: "music.note", label: "MIXES", value: "UNLIMITED")
             }
 
             // Subscribe Button
@@ -162,7 +162,7 @@ struct ProFeatureRow: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 16))
-                .foregroundColor(.tapelabAccentFull)
+                .foregroundColor(.tapelabLight)
                 .frame(width: 24, height: 24)
 
             Text(label)
@@ -173,7 +173,7 @@ struct ProFeatureRow: View {
 
             Text(value)
                 .font(.tapelabMonoSmall)
-                .foregroundColor(.tapelabAccentFull)
+                .foregroundColor(.tapelabLight)
         }
     }
 }

@@ -8,6 +8,16 @@ struct MixesListView: View {
     @State private var sortOrder: SortOrder = .dateNewest
     @EnvironmentObject var runtime: AudioRuntime
 
+    // Edit mix state
+    @State private var showEditSheet = false
+    @State private var editingMixID: UUID?
+    @State private var editingMixName: String = ""
+    @State private var editingMixCover: UIImage?
+
+    // Delete confirmation state
+    @State private var showDeleteConfirmation = false
+    @State private var deletingMixID: UUID?
+
     enum SortOrder: String, CaseIterable {
         case dateNewest = "Date (Newest)"
         case dateOldest = "Date (Oldest)"
@@ -42,6 +52,9 @@ struct MixesListView: View {
             searchText = ""
             isSearching = false
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ReloadMixes"))) { _ in
+            loadMixes()
+        }
         .sheet(item: $selectedMix) { mix in
             PlayerView(mix: mix, allMixes: mixMetadata)
                 .environmentObject(runtime)
@@ -54,6 +67,37 @@ struct MixesListView: View {
                 // Resume engine AFTER PlayerView dismisses
                 runtime.resumeAfterExternalPlayback()
             }
+        }
+        .alert(
+            "Delete Mix",
+            isPresented: $showDeleteConfirmation
+        ) {
+            Button("Cancel", role: .cancel) {
+                deletingMixID = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let mixID = deletingMixID {
+                    deleteMix(mixID)
+                }
+                deletingMixID = nil
+            }
+        } message: {
+            Text("Are you sure you want to delete this mix? This action cannot be undone.")
+        }
+        .sheet(isPresented: $showEditSheet) {
+            MixInfoSheet(
+                mixName: $editingMixName,
+                coverImage: $editingMixCover,
+                onSave: {
+                    saveEditedMix()
+                    showEditSheet = false
+                },
+                onCancel: {
+                    showEditSheet = false
+                }
+            )
+            .presentationDetents([.height(400)])
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -175,16 +219,36 @@ struct MixesListView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .listRowBackground(TapelabTheme.Colors.background)
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
                 .listRowSeparator(.hidden)
+                .contextMenu {
+                    Button(action: {
+                        shareMix(metadata.id)
+                    }) {
+                        Label("Share Mix", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button(action: {
+                        editMix(metadata)
+                    }) {
+                        Label("Edit Mix", systemImage: "pencil")
+                    }
+
+                    Divider()
+
+                    Button(role: .destructive, action: {
+                        deletingMixID = metadata.id
+                        showDeleteConfirmation = true
+                    }) {
+                        Label("Delete Mix", systemImage: "trash")
+                    }
+                }
             }
-            .onDelete(perform: deleteMixes)
         }
         .listStyle(PlainListStyle())
         .scrollContentBackground(.hidden)
         .background(TapelabTheme.Colors.background)
         .environment(\.editMode, .constant(.inactive))
-        .tint(Color.tapelabRed) // Use theme red for delete button
     }
 
     private func loadMixes() {
@@ -217,24 +281,88 @@ struct MixesListView: View {
         }
     }
 
-    private func deleteMixes(at offsets: IndexSet) {
-        for index in offsets {
-            let metadata = mixMetadata[index]
+    private func shareMix(_ mixID: UUID) {
+        do {
+            let mix = try FileStore.loadMix(mixID)
 
-            do {
-                try FileStore.deleteMix(metadata.id)
-            } catch {
+            // Create activity view controller with the audio file
+            let activityVC = UIActivityViewController(
+                activityItems: [mix.fileURL],
+                applicationActivities: nil
+            )
+
+            // Configure for iPad (required for popover presentation)
+            if let popoverController = activityVC.popoverPresentationController {
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let window = windowScene.windows.first {
+                    popoverController.sourceView = window
+                    popoverController.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popoverController.permittedArrowDirections = []
+                }
             }
+
+            // Present the share sheet
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootVC = windowScene.windows.first?.rootViewController {
+                var topController = rootVC
+                while let presentedVC = topController.presentedViewController {
+                    topController = presentedVC
+                }
+                topController.present(activityVC, animated: true)
+            }
+        } catch {
+            // Handle error silently
+        }
+    }
+
+    private func editMix(_ metadata: MixMetadata) {
+        editingMixID = metadata.id
+        editingMixName = metadata.name
+        editingMixCover = FileStore.loadMixCover(metadata.id)
+        showEditSheet = true
+    }
+
+    private func saveEditedMix() {
+        guard let mixID = editingMixID else { return }
+
+        do {
+            // Load the full mix
+            var mix = try FileStore.loadMix(mixID)
+            // Update the name
+            mix.name = editingMixName
+            try FileStore.saveMix(mix)
+
+            // Save cover image if changed
+            if let cover = editingMixCover {
+                try? FileStore.saveMixCover(cover, for: mixID)
+            }
+
+            // Reload mixes list
+            loadMixes()
+
+            // Notify to reload cover images
+            NotificationCenter.default.post(name: NSNotification.Name("ReloadMixes"), object: nil)
+        } catch {
+            // Handle error silently
         }
 
-        // Remove from local array
-        mixMetadata.remove(atOffsets: offsets)
+        editingMixID = nil
+    }
+
+    private func deleteMix(_ mixID: UUID) {
+        do {
+            try FileStore.deleteMix(mixID)
+            loadMixes()
+        } catch {
+            // Handle error silently
+        }
     }
 }
 
 struct MixMetadataRowView: View {
     let metadata: MixMetadata
     @State private var coverImage: UIImage? = nil
+    @State private var refreshID = UUID()
 
     var body: some View {
         HStack(spacing: 12) {
@@ -256,8 +384,13 @@ struct MixMetadataRowView: View {
                         )
                 }
             }
+            .id(refreshID)
             .onAppear {
                 loadCoverImage()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ReloadMixes"))) { _ in
+                loadCoverImage()
+                refreshID = UUID()
             }
 
             // Mix info
@@ -280,6 +413,7 @@ struct MixMetadataRowView: View {
         .padding(12)
         .background(Color.tapelabButtonBg)
         .cornerRadius(8)
+        .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 8))
     }
 
     private func loadCoverImage() {

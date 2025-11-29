@@ -1,8 +1,13 @@
+//
+//  MixInfoSheet.swift
+//  tapelab-beta
+//
+
 import SwiftUI
 import PhotosUI
 
-struct SessionInfoSheet: View {
-    @Binding var sessionName: String
+struct MixInfoSheet: View {
+    @Binding var mixName: String
     @Binding var coverImage: UIImage?
     let onSave: () -> Void
     let onCancel: () -> Void
@@ -17,18 +22,18 @@ struct SessionInfoSheet: View {
 
             VStack(spacing: 24) {
                 // Title
-                Text("SESSION INFO")
+                Text("MIX INFO")
                     .font(.tapelabMonoSmall)
                     .foregroundColor(.tapelabLight)
                     .padding(.top, 20)
 
-                // Session Name Field
+                // Mix Name Field
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("SESSION NAME")
+                    Text("MIX NAME")
                         .font(.tapelabMonoTiny)
                         .foregroundColor(.tapelabAccentFull.opacity(0.7))
 
-                    TextField("Session name", text: $sessionName)
+                    TextField("Mix name", text: $mixName)
                         .font(.tapelabMono)
                         .foregroundColor(.tapelabLight)
                         .padding(12)
@@ -123,8 +128,8 @@ struct SessionInfoSheet: View {
 }
 
 #Preview {
-    SessionInfoSheet(
-        sessionName: .constant("My Session"),
+    MixInfoSheet(
+        mixName: .constant("My Mix"),
         coverImage: .constant(nil),
         onSave: {},
         onCancel: {}

@@ -470,9 +470,9 @@ class SessionBouncer {
         }
         eq.bypass = fx.eqBands.isEmpty
 
-        // Reverb
+        // Reverb - always use plate (spring-like sound)
         reverb.wetDryMix = fx.reverb.wetMix
-        reverb.loadFactoryPreset(fx.reverb.roomSize ? .largeHall : .smallRoom)
+        reverb.loadFactoryPreset(.plate)
 
         // Delay
         delay.wetDryMix = fx.delay.wetMix
@@ -554,6 +554,7 @@ class SessionBouncer {
                         regionBuffers[i][region.id.id] = mono
                     }
                 } catch {
+                    print("⚠️ SessionBouncer: Failed to load region \(region.id.id): \(error)")
                 }
             }
         }

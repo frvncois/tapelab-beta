@@ -87,7 +87,7 @@ struct VOLSheetView: View {
                             .cornerRadius(8)
                         }
 
-                        // EQUALIZER Section (All EQ bands in one box)
+                        // EQUALIZER Section (Simple 2-band Low/High)
                         VStack(alignment: .leading, spacing: 12) {
                             // Section header with dot
                             HStack(spacing: 8) {
@@ -100,90 +100,57 @@ struct VOLSheetView: View {
                                     .foregroundColor(.tapelabLight)
                             }
 
-                            // All EQ bands in one box
-                            VStack(spacing: 0) {
-                                ForEach(track.fx.eqBands.indices, id: \.self) { index in
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        // Band label
-                                        Text(eqBandLabel(for: index))
+                            // Simple Low/High EQ controls
+                            VStack(spacing: 16) {
+                                // Low (Bass) control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("LOW")
                                             .font(.tapelabMonoSmall)
                                             .foregroundColor(.tapelabLight)
-
-                                        // Frequency control
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            HStack {
-                                                Text("FREQUENCY")
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                Spacer()
-                                                Text(formatFrequency(track.fx.eqBands[index].frequency))
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                    .monospacedDigit()
-                                            }
-                                            Slider(value: Binding(
-                                                get: { track.fx.eqBands[index].frequency },
-                                                set: { newValue in
-                                                    track.fx.eqBands[index].frequency = newValue
-                                                    applyFXUpdate()
-                                                }
-                                            ), in: frequencyRange(for: index), step: frequencyStep(for: index))
-                                            .accentColor(.tapelabAccentFull)
-                                        }
-
-                                        // Gain control
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            HStack {
-                                                Text("GAIN")
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                Spacer()
-                                                Text(formatGain(track.fx.eqBands[index].gainDB))
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                    .monospacedDigit()
-                                            }
-                                            Slider(value: Binding(
-                                                get: { track.fx.eqBands[index].gainDB },
-                                                set: { newValue in
-                                                    track.fx.eqBands[index].gainDB = newValue
-                                                    applyFXUpdate()
-                                                }
-                                            ), in: -12...12, step: 0.5)
-                                            .accentColor(.tapelabAccentFull)
-                                        }
-
-                                        // Q control
-                                        VStack(alignment: .leading, spacing: 6) {
-                                            HStack {
-                                                Text("Q FACTOR")
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                Spacer()
-                                                Text(formatQ(track.fx.eqBands[index].q))
-                                                    .font(.tapelabMonoSmall)
-                                                    .foregroundColor(.tapelabAccentFull)
-                                                    .monospacedDigit()
-                                            }
-                                            Slider(value: Binding(
-                                                get: { track.fx.eqBands[index].q },
-                                                set: { newValue in
-                                                    track.fx.eqBands[index].q = newValue
-                                                    applyFXUpdate()
-                                                }
-                                            ), in: 0.5...3.0, step: 0.1)
-                                            .accentColor(.tapelabAccentFull)
-                                        }
+                                        Spacer()
+                                        Text(formatGain(track.fx.eqBands.count > 0 ? track.fx.eqBands[0].gainDB : 0))
+                                            .font(.tapelabMonoSmall)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
                                     }
-                                    .padding(16)
+                                    Slider(value: Binding(
+                                        get: { track.fx.eqBands.count > 0 ? track.fx.eqBands[0].gainDB : 0 },
+                                        set: { newValue in
+                                            if track.fx.eqBands.count > 0 {
+                                                track.fx.eqBands[0].gainDB = newValue
+                                                applyFXUpdate()
+                                            }
+                                        }
+                                    ), in: -12...12, step: 0.5)
+                                    .accentColor(.tapelabAccentFull)
+                                }
 
-                                    // Add separator between bands
-                                    if index < track.fx.eqBands.count - 1 {
-                                        Divider()
-                                            .background(Color.tapelabDark)
+                                // High (Treble) control
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text("HIGH")
+                                            .font(.tapelabMonoSmall)
+                                            .foregroundColor(.tapelabLight)
+                                        Spacer()
+                                        Text(formatGain(track.fx.eqBands.count > 1 ? track.fx.eqBands[1].gainDB : 0))
+                                            .font(.tapelabMonoSmall)
+                                            .foregroundColor(.tapelabAccentFull)
+                                            .monospacedDigit()
                                     }
+                                    Slider(value: Binding(
+                                        get: { track.fx.eqBands.count > 1 ? track.fx.eqBands[1].gainDB : 0 },
+                                        set: { newValue in
+                                            if track.fx.eqBands.count > 1 {
+                                                track.fx.eqBands[1].gainDB = newValue
+                                                applyFXUpdate()
+                                            }
+                                        }
+                                    ), in: -12...12, step: 0.5)
+                                    .accentColor(.tapelabAccentFull)
                                 }
                             }
+                            .padding(16)
                             .background(TapelabTheme.Colors.surface)
                             .cornerRadius(8)
                         }
@@ -216,7 +183,7 @@ struct VOLSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Track \(track.number) Volume & EQ")
-                        .font(.tapelabMono)
+                        .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -240,45 +207,7 @@ struct VOLSheetView: View {
     }
 
 
-    // MARK: - EQ Helper Functions
-
-    private func eqBandLabel(for index: Int) -> String {
-        switch index {
-        case 0: return "LOW (100 HZ)"
-        case 1: return "LOW-MID (500 HZ)"
-        case 2: return "HIGH-MID (2 KHZ)"
-        case 3: return "HIGH (8 KHZ)"
-        default: return "BAND \(index + 1)"
-        }
-    }
-
-    private func frequencyRange(for index: Int) -> ClosedRange<Double> {
-        switch index {
-        case 0: return 60...250      // Low
-        case 1: return 250...1000    // Low-Mid
-        case 2: return 1000...4000   // High-Mid
-        case 3: return 4000...16000  // High
-        default: return 60...16000
-        }
-    }
-
-    private func frequencyStep(for index: Int) -> Double {
-        switch index {
-        case 0: return 5      // Low: 5 Hz steps
-        case 1: return 10     // Low-Mid: 10 Hz steps
-        case 2: return 50     // High-Mid: 50 Hz steps
-        case 3: return 100    // High: 100 Hz steps
-        default: return 10
-        }
-    }
-
-    private func formatFrequency(_ frequency: Double) -> String {
-        if frequency >= 1000 {
-            return String(format: "%.1f kHz", frequency / 1000)
-        } else {
-            return String(format: "%.0f Hz", frequency)
-        }
-    }
+    // MARK: - Helper Functions
 
     private func formatGain(_ gain: Double) -> String {
         if gain >= 0 {
@@ -286,9 +215,5 @@ struct VOLSheetView: View {
         } else {
             return String(format: "%.1f dB", gain)
         }
-    }
-
-    private func formatQ(_ q: Double) -> String {
-        return String(format: "Q: %.1f", q)
     }
 }

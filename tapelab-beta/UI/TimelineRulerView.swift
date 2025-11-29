@@ -114,7 +114,7 @@ struct TimelineRulerView: View {
                     .frame(width: 12, height: 24)
             }
             .offset(x: pointerPosition - 22, y: 0)
-            .gesture(
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if !isDragging {
@@ -163,7 +163,7 @@ struct TimelineRulerView: View {
                     .frame(width: 8, height: 30)
             }
             .offset(x: loopStartX - 22, y: 0)
-            .gesture(
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if !isDraggingLoopStart {
@@ -193,7 +193,7 @@ struct TimelineRulerView: View {
                     .frame(width: 8, height: 30)
             }
             .offset(x: loopEndX - 22, y: 0)
-            .gesture(
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         if !isDraggingLoopEnd {

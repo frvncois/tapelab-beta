@@ -135,7 +135,7 @@ struct ImportAudioSheet: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Import Audio")
-                        .font(.tapelabMono)
+                        .font(.tapelabMonoSmall)
                         .foregroundColor(.tapelabLight)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {

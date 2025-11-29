@@ -10,7 +10,7 @@ import Combine
 @MainActor
 public final class AudioEngineController: ObservableObject {
     // DEBUG FLAGS - Set these to test different configurations
-    static let DISABLE_LIMITER = true        // CHANGED: Test without limiter
+    static let DISABLE_LIMITER = false       // Production: limiter enabled
     static let USE_SINGLE_TRACK_ONLY = false
 
     let engine = AVAudioEngine()
@@ -46,6 +46,7 @@ public final class AudioEngineController: ObservableObject {
                 let retryFormat = engine.outputNode.outputFormat(forBus: 0)
                 detectedSampleRate = retryFormat.sampleRate
             } catch {
+                print("⚠️ AudioEngineController: Engine start/stop for format detection failed: \(error)")
             }
 
             if detectedSampleRate <= 0 || detectedSampleRate > 192000 {
@@ -59,10 +60,15 @@ public final class AudioEngineController: ObservableObject {
 
         // Create audio formats with validated sample rate
         // AVAudioFormat with standard format and valid rate should always succeed
-        processingFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
-            ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-        stereoFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
-            ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
+        // Using guard to ensure we have valid formats - these should never fail with valid sample rates
+        guard let monoFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
+                ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1),
+              let stereo = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2)
+                ?? AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2) else {
+            fatalError("AudioEngineController: Failed to create audio formats - this should never happen")
+        }
+        processingFormat = monoFormat
+        stereoFormat = stereo
 
 
         let limiterDesc = AudioComponentDescription(
@@ -161,9 +167,10 @@ public final class AudioEngineController: ObservableObject {
             try session.setActive(true)
 
         } catch {
+            print("⚠️ AudioEngineController: Audio session configuration failed: \(error)")
         }
     }
-    
+
     private func setupTracks(count: Int) {
         for _ in 0..<count {
             let bus = TrackBus()
@@ -198,11 +205,19 @@ public final class AudioEngineController: ObservableObject {
             try session.setActive(false, options: .notifyOthersOnDeactivation)
             try session.setActive(true)
         } catch {
+            print("⚠️ AudioEngineController: Audio session reactivation failed: \(error)")
         }
     }
-    
+
     func stop() {
         engine.stop()
+    }
+
+    /// Reset all track effects to clear delay/reverb tails
+    func resetAllEffects() {
+        for bus in trackBuses {
+            bus.resetEffects()
+        }
     }
 
     func diagnoseAudioIssues() {

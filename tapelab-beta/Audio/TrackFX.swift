@@ -20,9 +20,7 @@ public struct EQBand: Codable, Hashable {
 // MARK: - Reverb FX
 public struct ReverbFX: Codable, Hashable {
     public var wetMix: Float       // 0–100
-    public var roomSize: Bool      // true = large hall (always use large hall)
-    public var preDelay: Double    // seconds
-    public static let neutral = ReverbFX(wetMix: 0, roomSize: true, preDelay: 0)
+    public static let neutral = ReverbFX(wetMix: 0)
 }
 
 // MARK: - Delay FX
@@ -47,12 +45,10 @@ public struct TrackFX: Codable, Hashable {
     public var volumeDB: Double = 0.0     // overall gain
     public var pan: Float = 0.0           // -1.0 (L) to 1.0 (R)
 
-    // EQ
+    // EQ - Simple 2-band (Low/High)
     public var eqBands: [EQBand] = [
-        EQBand(frequency: 100),
-        EQBand(frequency: 500),
-        EQBand(frequency: 2000),
-        EQBand(frequency: 8000)
+        EQBand(frequency: 200, gainDB: 0, q: 0.7),   // Low (bass)
+        EQBand(frequency: 4000, gainDB: 0, q: 0.7)   // High (treble)
     ]
 
     // Effects
@@ -63,10 +59,8 @@ public struct TrackFX: Codable, Hashable {
     public init(volumeDB: Double = 0.0,
                 pan: Float = 0.0,
                 eqBands: [EQBand] = [
-                    EQBand(frequency: 100),
-                    EQBand(frequency: 500),
-                    EQBand(frequency: 2000),
-                    EQBand(frequency: 8000)
+                    EQBand(frequency: 200, gainDB: 0, q: 0.7),
+                    EQBand(frequency: 4000, gainDB: 0, q: 0.7)
                 ],
                 reverb: ReverbFX = .neutral,
                 delay: DelayFX = .neutral,
@@ -110,10 +104,8 @@ public struct TrackFX: Codable, Hashable {
         volumeDB = 0.0
         pan = 0.0
         eqBands = [
-            EQBand(frequency: 100),
-            EQBand(frequency: 500),
-            EQBand(frequency: 2000),
-            EQBand(frequency: 8000)
+            EQBand(frequency: 200, gainDB: 0, q: 0.7),
+            EQBand(frequency: 4000, gainDB: 0, q: 0.7)
         ]
     }
 }

@@ -355,10 +355,11 @@ struct RegionView: View {
             return
         }
 
-        // Calculate target points based on width to ensure proper waveform density
-        // We want approximately 2-3 points per pixel for smooth rendering
-        let regionWidth = region.duration * pixelsPerSecond
-        let targetPoints = max(100, min(2000, Int(regionWidth * 2.5)))
+        // Use fixed points per second of audio (not dependent on zoom level)
+        // This ensures consistent waveform detail regardless of region length
+        // 50 points per second gives good detail: 8 min = 480s * 50 = 24000 points max
+        let pointsPerSecond: Double = 50
+        let targetPoints = max(100, min(24000, Int(region.duration * pointsPerSecond)))
 
         // Generate waveform data on a background thread
         Task.detached(priority: .userInitiated) {

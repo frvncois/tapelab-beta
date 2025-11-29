@@ -253,6 +253,14 @@ struct SessionView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
+        .onDisappear {
+            // Stop recording or playback when leaving the session view
+            if runtime.timeline.isRecording {
+                runtime.stopRecording(onTrack: armedTrack - 1)
+            } else if runtime.timeline.isPlaying {
+                runtime.stopPlayback(resetPlayhead: false)
+            }
+        }
     }
 
     // Export session to stereo mix

@@ -2,7 +2,6 @@ import SwiftUI
 import AVFAudio
 import Combine
 
-/// Simple audio player for playing back bounced mixes
 struct PlayerView: View {
     let mix: Mix
     let allMixes: [MixMetadata]
@@ -95,19 +94,14 @@ struct PlayerView: View {
 
                     Spacer()
 
-                    // Controls section (on dark background)
                     VStack(spacing: 24) {
-                        // Time display
                         VStack(spacing: 12) {
-                            // Progress bar
                             GeometryReader { geometry in
                                 ZStack(alignment: .leading) {
-                                    // Background
                                     RoundedRectangle(cornerRadius: 2)
                                         .fill(Color.white.opacity(0.2))
                                         .frame(height: 4)
 
-                                    // Progress
                                     RoundedRectangle(cornerRadius: 2)
                                         .fill(Color.white)
                                         .frame(width: geometry.size.width * CGFloat(player.progress), height: 4)
@@ -116,11 +110,10 @@ struct PlayerView: View {
                             .frame(height: 4)
                             .padding(.horizontal, 40)
 
-                            // Time labels
                             HStack(spacing: 8) {
                                 Text(formatTime(player.currentTime))
                                     .font(.tapelabMonoSmall)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.tapelabLight)
                                     .monospacedDigit()
                                     .frame(width: 60, alignment: .leading)
 
@@ -135,19 +128,17 @@ struct PlayerView: View {
                             .padding(.horizontal, 40)
                         }
 
-                        // Transport controls
+
                         HStack(spacing: 40) {
-                            // Rewind button - matching TransportView style
                             Button(action: {
                                 player.seek(to: 0)
                             }) {
                                 Image(systemName: "backward.end.fill")
                                     .font(.title2)
-                                    .foregroundColor(.tapelabAccentFull)
+                                    .foregroundColor(.tapelabLight)
                             }
                             .buttonStyle(.plain)
 
-                            // Play/Pause button - matching TransportView style
                             Button(action: {
                                 if player.isPlaying {
                                     player.pause()
@@ -161,7 +152,6 @@ struct PlayerView: View {
                             }
                             .buttonStyle(.plain)
 
-                            // Share button - matching TransportView style
                             Button(action: {
                                 shareAudioFile()
                             }) {
@@ -189,30 +179,17 @@ struct PlayerView: View {
     }
 
     private var header: some View {
-        // Title centered
-        VStack(spacing: 4) {
-            Text(currentMix.name)
-                .font(.tapelabMonoHeadline)
-                .lineLimit(1)
-                .foregroundColor(.white)
-
-            Text(currentMix.sessionName)
-                .font(.tapelabMonoSmall)
-                .foregroundColor(.white.opacity(0.7))
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
+        Text(currentMix.name)
+            .font(.tapelabMonoHeadline)
+            .lineLimit(1)
+            .foregroundColor(.tapelabLight)
+            .frame(maxWidth: .infinity)
+            .padding()
     }
 
     private func loadCurrentMix() {
-        // Load cover image
         coverImage = FileStore.loadMixCover(currentMix.id)
-
-
-        // Stop current playback
         player.stop()
-
-        // Small delay to ensure player is stopped
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             player.load(url: currentMix.fileURL)
         }
@@ -224,8 +201,6 @@ struct PlayerView: View {
         if let currentIndex = allMixes.firstIndex(where: { $0.id == currentMix.id }) {
             let nextIndex = (currentIndex + 1) % allMixes.count
             let nextMixMetadata = allMixes[nextIndex]
-
-            // Load full mix from metadata
             if let fullMix = try? FileStore.loadMix(nextMixMetadata.id) {
                 currentMix = fullMix
             }
@@ -238,8 +213,6 @@ struct PlayerView: View {
         if let currentIndex = allMixes.firstIndex(where: { $0.id == currentMix.id }) {
             let previousIndex = (currentIndex - 1 + allMixes.count) % allMixes.count
             let previousMixMetadata = allMixes[previousIndex]
-
-            // Load full mix from metadata
             if let fullMix = try? FileStore.loadMix(previousMixMetadata.id) {
                 currentMix = fullMix
             }
@@ -253,15 +226,12 @@ struct PlayerView: View {
     }
 
     private func shareAudioFile() {
-        // Create activity view controller with the audio file
         let activityVC = UIActivityViewController(
             activityItems: [currentMix.fileURL],
             applicationActivities: nil
         )
 
-        // Configure for iPad (required for popover presentation)
         if let popoverController = activityVC.popoverPresentationController {
-            // Find the share button view to anchor the popover
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let window = windowScene.windows.first {
                 popoverController.sourceView = window
@@ -270,10 +240,8 @@ struct PlayerView: View {
             }
         }
 
-        // Present the share sheet
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootVC = windowScene.windows.first?.rootViewController {
-            // Find the topmost view controller
             var topController = rootVC
             while let presentedVC = topController.presentedViewController {
                 topController = presentedVC
